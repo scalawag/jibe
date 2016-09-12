@@ -7,7 +7,7 @@ import com.jcraft.jsch.{ChannelExec, JSch, UserInfo}
 class Session(val s: com.jcraft.jsch.Session) {
   // Command can include bash scripting with ';' and '&&' and can use environment variables
 
-  def execute(command: String): CommandResults = {
+  def execute(command: String, sudo: Boolean = false): CommandResults = {
     val c = s.openChannel("exec").asInstanceOf[ChannelExec]
 
     val out = new ByteArrayOutputStream()
@@ -18,7 +18,16 @@ class Session(val s: com.jcraft.jsch.Session) {
     c.setOutputStream(out)
     c.setErrStream(err)
 
-    c.setCommand(command)
+    val actualCommand =
+      if ( sudo )
+        s"""sudo /bin/bash -c '
+            |$command
+            |'
+       """.stripMargin
+      else
+        command
+
+    c.setCommand(actualCommand)
     c.connect()
 
     while ( !c.isClosed )
