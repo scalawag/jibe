@@ -1,3 +1,13 @@
 package org.scalawag.jibe.backend
 
-case class MandateResults(exitCode: Int, commandResults: Iterable[CommandResults])
+object MandateResults {
+  object Outcome extends Enumeration {
+    val SUCCESS = Value
+    val FAILURE = Value
+    val USELESS = Value
+  }
+}
+
+case class MandateResults(mandate: Mandate,
+                          outcome: MandateResults.Outcome.Value,
+                          innards: Either[Iterable[MandateResults], CommandResults])

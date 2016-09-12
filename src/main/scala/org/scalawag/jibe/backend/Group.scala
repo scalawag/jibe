@@ -1,7 +1,7 @@
 package org.scalawag.jibe.backend
 
 case class Group(name: String,
-                 uid: Option[Int] = None,
+                 gid: Option[Int] = None,
                  system: Boolean = false)
 
 object Group {
