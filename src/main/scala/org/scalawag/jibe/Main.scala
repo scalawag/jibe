@@ -10,17 +10,19 @@ object Main {
   def main(args: Array[String]): Unit = {
     val ssh = SSHConnectionInfo("localhost", "vagrant", "vagrant", 2222, sudo = true)
 
-    val CreatePersonalUserMandate = CompositeMandate(
-      CreateOrUpdateUser("justin"),
-      CreateOrUpdateGroup("personal"),
-      AddUserToGroups("justin", "personal")
-    )
+    def CreatePersonalUserMandate(name: String) =
+      CompositeMandate("create personal user: $name",
+        CreateOrUpdateUser(name),
+        CreateOrUpdateGroup("personal"),
+        AddUserToGroups(name, "personal")
+      )
 
     val mandates = Iterable(
       AddUserToGroups("justin", "personal") before CreateOrUpdateGroup("public"),
       CreateOrUpdateUser("justin"),
       CreateOrUpdateGroup("personal"),
-      CreatePersonalUserMandate
+      CreateOrUpdateUser(User("pope", primaryGroup = Some("personal"), home = Some("/tmp"), uid = Some(5005))),
+      CreatePersonalUserMandate("justin")
     )
 
     val orderedMandates = Orderer.order(mandates)

@@ -10,7 +10,7 @@ object Orderer {
     @tailrec
     def helper(input: Iterable[Mandate], output: Iterable[Mandate] = Iterable.empty): Iterable[Mandate] =
       input.headOption match {
-        case Some(CompositeMandate(ms@_*)) =>
+        case Some(CompositeMandate(_, ms@_*)) =>
           helper(ms ++ input.tail, output)
         case Some(m) =>
           helper(input.tail, output ++ Iterable(m))
@@ -28,7 +28,7 @@ object Orderer {
 
     def addNodesToGraph(mandate: Mandate): Unit =
       mandate match {
-        case CompositeMandate(mandates@_*) =>
+        case CompositeMandate(_, mandates@_*) =>
           mandates.foreach(addNodesToGraph)
         case _ =>
           graph += mandate
@@ -40,7 +40,7 @@ object Orderer {
 
     def addExplicitEdgesToGraph(mandate: Mandate): Unit =
       mandate match {
-        case CompositeMandate(mandates@_*) =>
+        case CompositeMandate(_, mandates@_*) =>
           mandates.foreach(addExplicitEdgesToGraph)
           if ( mandates.size > 1 )
             mandates.sliding(2).foreach { pair =>

@@ -4,10 +4,12 @@ package org.scalawag.jibe.backend
   * commands or it can be an aggregation of several other Mandates.
   */
 
-trait Mandate extends ResourceRelated
+trait Mandate extends ResourceRelated {
+  val description: Option[String] = None
+}
 
 object Mandate {
   implicit class MandatePimper(mandate: Mandate) {
-    def before(after: Mandate) = CompositeMandate(mandate, after)
+    def before(after: Mandate) = CompositeMandate("before", mandate, after)
   }
 }

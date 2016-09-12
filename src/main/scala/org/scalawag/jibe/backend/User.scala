@@ -14,6 +14,8 @@ object User {
 }
 
 case class CreateOrUpdateUser(user: User) extends Mandate {
+  override val description = Some(s"update user: ${user.name}")
+
   override def prerequisites = Iterable(
     user.primaryGroup.map(GroupResource),
     user.home.map(FileResource),
@@ -23,4 +25,6 @@ case class CreateOrUpdateUser(user: User) extends Mandate {
   override def consequences = Iterable(UserResource(user.name))
 }
 
-case class DeleteUser(name: String) extends Mandate
+case class DeleteUser(name: String) extends Mandate {
+  override val description = Some(s"delete user: ${name}")
+}
