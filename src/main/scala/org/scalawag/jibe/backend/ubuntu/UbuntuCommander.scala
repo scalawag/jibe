@@ -92,13 +92,46 @@ class CreateOrUpdateGroupCommand(group: Group) extends Command with BashCommands
 
 class CreateOrUpdateUserCommand(user: User) extends Command with BashCommands {
 
-  override protected def getTestScript =
-    s"""
-       |echo one
-       |echo two >& 2
-       |echo three
-       |exit 1
-     """.stripMargin
+  override protected def getTestScript = {
+    // These are where the parts we may care about live in the lines in /etc/passwd.  Primary group requires special
+    // handling because it's a reference
+
+    val conditions =
+      List(
+        user.uid -> 2,
+        user.comment -> 4,
+        user.home -> 5,
+        user.shell -> 6
+      ) flatMap { case (desiredOption, index) =>
+        desiredOption map { desired =>
+          s"""  if [ $${parts[$index]} != "$desired" ]; then exit 1; fi\n"""
+        }
+      }
+
+    val groupCondition =
+      user.primaryGroup map { groupName =>
+        s"""  gname=$$( awk -F: '$$3 == '$${parts[3]}' { print $$1 }' /etc/group )
+           |  if [ "$$gname" != "$groupName" ]; then exit 1; fi
+         """.stripMargin
+      }
+
+    Seq(
+      Some(
+        s"""IFS=":" read -a parts <<< $$( grep ^${user.name}: /etc/passwd )
+           |if [ $${#parts[*]} -eq 0 ]; then
+           |  exit 1
+           |else
+         """.stripMargin).toIterable,
+      conditions.toIterable,
+      groupCondition.toIterable,
+      Some(
+        s"""
+           |  exit 0
+           |fi
+         """.stripMargin
+      ).toIterable
+    ).flatten.mkString
+  }
 
   override protected def getPerformScript = {
     val commonOptions = mapify(
