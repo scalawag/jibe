@@ -17,48 +17,53 @@ object Reporter {
 
   private def scriptTable(label: String, dir: File): NodeSeq = {
     val exitCode = Source.fromFile(dir / "exitCode").mkString.toInt
-    val stdout = Source.fromFile(dir / "stdout").getLines()
-    val stderr = Source.fromFile(dir / "stderr").getLines()
+    val script = Source.fromFile(dir / "script").getLines()
+    val output = Source.fromFile(dir / "output").getLines()
 
-    val o =
+    val outputElems =
       {
-        if ( stdout.isEmpty )
+        if ( output.isEmpty )
           NodeSeq.Empty
         else
           <tr>
-            <td>stdout</td>
-            <td>
-              {
-                stdout.map( l => <div>{l}</div>)
-              }
+            <td bgcolor="black">
+              <pre>{
+                output map { l =>
+                  val (color, text) =
+                    if ( l.startsWith("E:") )
+                      ("red", l.substring(2))
+                    else if ( l.startsWith("O:") )
+                      ("lightgray", l.substring(2))
+                    else
+                      ("lightgray", l)
+
+                  <div><font color={color}>{text}</font></div>
+                }
+              }</pre>
             </td>
           </tr>
       }
 
-    val e =
+    val scriptElems =
     {
-      if ( stderr.isEmpty )
+      if ( script.isEmpty )
         NodeSeq.Empty
       else
         <tr>
-          <td>stderr</td>
           <td>
-            {
-            stderr.map( l => <div>{l}</div>)
-            }
+            <pre>{
+  script map { l => <div>{l}</div> }
+}</pre>
           </td>
         </tr>
     }
 
     Seq(
       <tr>
-        <td colspan="2">{label}</td>
-      </tr>
-      <tr>
-        <td>exit code</td>
-        <td>{exitCode}</td>
+        <td colspan="2" bgcolor="lightgray">{label} => {exitCode}</td>
       </tr>,
-      o,e).flatten
+      scriptElems,
+      outputElems).flatten
 
   }
 
@@ -80,6 +85,9 @@ object Reporter {
           case MandateResults.Outcome.SUCCESS => "green"
           case MandateResults.Outcome.FAILURE => "red"
           case MandateResults.Outcome.USELESS => "yellow"
+//        case MandateResults.Outcome.SUCCESS => ("#4F8A10","#DFF2BF")
+//        case MandateResults.Outcome.FAILURE => ("#D8000C","#FFBABA")
+//        case MandateResults.Outcome.USELESS => ("#9F6000","#FEEFB3")
         }
 
         val header =

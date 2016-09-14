@@ -1,6 +1,6 @@
 package org.scalawag.jibe.backend
 
-import java.io.{ByteArrayOutputStream, File, FileOutputStream}
+import java.io._
 
 import com.jcraft.jsch.{ChannelExec, JSch, UserInfo}
 import org.scalawag.jibe.FileUtils._
@@ -12,41 +12,78 @@ class Session(val s: com.jcraft.jsch.Session) {
     val c = s.openChannel("exec").asInstanceOf[ChannelExec]
     c.setInputStream(null)
 
-    writeFileWithOutputStream(reportDir / "stdout") { out =>
-      writeFileWithOutputStream(reportDir / "stderr") { err =>
+    writeFileWithOutputStream(reportDir / "output") { out =>
+      val demux = new DemuxOutputStream(out)
+      c.setOutputStream(demux.createChannel("O:"))
+      c.setErrStream(demux.createChannel("E:"))
 
-        c.setOutputStream(out)
-        c.setErrStream(err)
+      val actualCommand =
+        if ( sudo )
+          s"""sudo /bin/bash <<'EOS'
+              |$command
+              |EOS
+         """.stripMargin
+        else
+          command
 
-        val actualCommand =
-          if ( sudo )
-            s"""sudo /bin/bash <<'EOS'
-                |$command
-                |EOS
-           """.stripMargin
-          else
-            command
+      writeFileWithPrintWriter(reportDir / "script") { w =>
+        w.print(actualCommand)
+      }
 
-        writeFileWithPrintWriter(reportDir / "script") { w =>
-          w.print(actualCommand)
-        }
+      c.setCommand(actualCommand)
+      c.connect()
 
-        c.setCommand(actualCommand)
-        c.connect()
+      // TODO: maybe not block here and use futures instead.
+      while ( !c.isClosed )
+        Thread.sleep(100)
 
-        // TODO: maybe not block here and use futures instead.
-        while ( !c.isClosed )
-          Thread.sleep(100)
+      c.disconnect()
 
-        c.disconnect()
-
-        writeFileWithPrintWriter(reportDir / "exitCode") { ec =>
-          ec.print(c.getExitStatus)
-        }
+      writeFileWithPrintWriter(reportDir / "exitCode") { ec =>
+        ec.print(c.getExitStatus)
       }
     }
 
     c.getExitStatus
+  }
+
+  private[this] val endl = System.getProperty("line.separator")
+
+  class DemuxOutputStream(demux: OutputStream) {
+    private[this] var channels: List[Channel] = Nil
+
+    private[this] val lock = new Object
+
+    private[this] class Channel(tag: String) extends OutputStream {
+      private[this] var buffer: Seq[Byte] = Seq.empty
+
+      override def write(b: Int) = {
+        val s = new String(Array(b.toByte))
+        if ( s == endl )
+          flushBuffer()
+        else
+          buffer :+= b.toByte
+      }
+
+      def flushBuffer() =
+        if ( ! buffer.isEmpty ) {
+          lock.synchronized {
+            demux.write(tag.getBytes)
+            demux.write(buffer.toArray)
+            demux.write(endl.getBytes)
+          }
+          buffer = Seq.empty
+        }
+    }
+
+    def createChannel(tag: String): OutputStream = new Channel(tag)
+
+    def close(): Unit = {
+      channels.foreach { c =>
+        c.close()
+        c.flushBuffer()
+      }
+    }
   }
 }
 
