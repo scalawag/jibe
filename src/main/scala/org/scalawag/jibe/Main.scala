@@ -1,7 +1,11 @@
 package org.scalawag.jibe
 
+import java.io.File
+import java.util.TimeZone
+import FileUtils._
 import org.scalawag.jibe.backend.ubuntu.UbuntuCommander
 import org.scalawag.jibe.backend._
+import org.scalawag.timber.backend.receiver.formatter.timestamp.ISO8601TimestampFormatter
 
 import scala.io.Source
 
@@ -10,7 +14,7 @@ object Main {
   def main(args: Array[String]): Unit = {
     val ssh = SSHConnectionInfo("localhost", "vagrant", "vagrant", 2222, sudo = true)
 
-    def CreatePersonalUserMandate(name: String) =
+    def CreatePersonalUser(name: String) =
       CompositeMandate(s"create personal user: $name",
         CreateOrUpdateUser(name),
         CreateOrUpdateGroup("personal"),
@@ -18,19 +22,22 @@ object Main {
       )
 
     val mandate = CompositeMandate(
-      AddUserToGroups("justin", "personal") before CreateOrUpdateGroup("public"),
-      CreateOrUpdateUser("justin"),
+      AddUserToGroups("jack", "public") before CreateOrUpdateGroup("public"),
+      CreateOrUpdateUser("robot"),
       CreateOrUpdateGroup("personal"),
       CreateOrUpdateUser(User("pope", primaryGroup = Some("personal"), home = Some("/tmp"), uid = Some(5005))),
-      CreatePersonalUserMandate("justin")
+      CreatePersonalUser("ernie"),
+      CreatePersonalUser("bert")
     )
 
     val orderedMandate = Orderer.orderMandate(mandate)
 
-    val results = Executive.apply(orderedMandate, ssh, UbuntuCommander)
+    val date = ISO8601TimestampFormatter(TimeZone.getTimeZone("UTC")).format(System.currentTimeMillis)
+    val resultsDir = new File("results") / date
+    val results = Executive.apply(orderedMandate, ssh, UbuntuCommander, resultsDir / "raw")
 
     // TODO: These results really shouldn't be buffered in memory, but how can we output them sensibly if they're not?
-
+/*
     def dumpMandate(mandate: Mandate, depth: Int = 0): Unit = {
       val prefix = "  " * depth
 
@@ -44,8 +51,9 @@ object Main {
     }
 
     dumpMandate(orderedMandate)
-
-    val verbose = false
+*/
+      /*
+    val verbose = true
 
     def dumpResults(r: MandateResults, depth: Int = 0): Unit = {
       val prefix = "  " * depth
@@ -65,26 +73,45 @@ object Main {
           innards.foreach(dumpResults(_, depth + 1))
         case Right(cr) =>
           if ( verbose ) {
-            val exitCodeColor = cr.exitCode match {
-              case 0 => Console.GREEN
-              case n => Console.RED
-            }
+            val exitCodeColor =
+              (cr.testResults.exitCode, cr.performResults.map(_.exitCode)) match {
+                case (0, _) => Console.YELLOW
+                case (_, Some(0)) => Console.GREEN
+                case (_, _) => Console.RED
+              }
 
-            val out = Source.fromString(cr.stdout).getLines
-            val err = Source.fromString(cr.stderr).getLines
+            val tcmd = Source.fromString(cr.testResults.command).getLines
 
-            if ( out.hasNext || err.hasNext )
+            println(prefix + scala.Console.WHITE + "-" * 120)
+            tcmd.foreach( l => println(prefix + scala.Console.WHITE + l) )
+
+            val tout = Source.fromString(cr.testResults.stdout).getLines
+            val terr = Source.fromString(cr.testResults.stderr).getLines
+
+            if ( tout.hasNext || terr.hasNext )
               println(prefix + scala.Console.WHITE + "-" * 120)
+            terr.foreach( l => println(prefix + scala.Console.RED + l) )
+            tout.foreach( l => println(prefix + scala.Console.CYAN + l) )
 
-            println()
-            err.foreach( l => println(prefix + scala.Console.RED + l) )
-            out.foreach( l => println(prefix + scala.Console.CYAN + l) )
+            val pcmd = cr.performResults.toIterable.map(_.command).map(Source.fromString).flatMap(_.getLines)
+
+            println(prefix + scala.Console.WHITE + "-" * 120)
+            pcmd.foreach( l => println(prefix + scala.Console.WHITE + l) )
+
+            val pout = cr.performResults.map(_.stdout).map(Source.fromString).map(_.getLines)
+            val perr = cr.performResults.map(_.stderr).map(Source.fromString).map(_.getLines)
+
+            if ( pout.map(_.hasNext).getOrElse(false) || perr.map(_.hasNext).getOrElse(false) )
+              println(prefix + scala.Console.WHITE + "-" * 120)
+            perr.foreach(_.foreach( l => println(prefix + scala.Console.RED + l) ))
+            pout.foreach(_.foreach( l => println(prefix + scala.Console.CYAN + l) ))
           }
       }
     }
 
     dumpResults(results)
-
+*/
+    Reporter.generate(resultsDir / "raw", resultsDir / "html" / "index.html")
     Sessions.shutdown
   }
 }

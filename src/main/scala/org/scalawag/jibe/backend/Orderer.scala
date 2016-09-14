@@ -1,8 +1,9 @@
 package org.scalawag.jibe.backend
 
 import scala.annotation.tailrec
-import scalax.collection.Graph
-import scalax.collection.GraphEdge.DiEdge
+import scalax.collection.{Graph, GraphBase}
+import scalax.collection.edge.LDiEdge
+import scalax.collection.immutable.DefaultGraphImpl
 
 object Orderer {
 
@@ -22,7 +23,7 @@ object Orderer {
   }
 
   def order(mandates: Iterable[Mandate]): Iterable[Mandate] = {
-    var graph = Graph[Mandate, DiEdge]()
+    var graph = Graph[Mandate, LDiEdge]()
 
     // Add all of our Mandates into the graph as nodes.  CompositeMandates are entered individually.
 
@@ -44,7 +45,7 @@ object Orderer {
           mandates.foreach(addExplicitEdgesToGraph)
           if ( mandates.size > 1 )
             mandates.sliding(2).foreach { pair =>
-              graph += DiEdge(pair(0), pair(1))
+              graph += LDiEdge(pair(0), pair(1))("before")
             }
         case _ =>
           // NOOP
@@ -76,7 +77,7 @@ object Orderer {
       byConsequences.get(resource) foreach { befores =>
         befores foreach { before =>
           afters foreach { after =>
-            graph += DiEdge(before, after)
+            graph += LDiEdge(before, after)(resource)
           }
         }
       }
@@ -91,7 +92,7 @@ object Orderer {
     mandate match {
       case CompositeMandate(desc, innards@_*) =>
 
-        var graph = Graph[Mandate, DiEdge]()
+        var graph = Graph[Mandate, LDiEdge]()
 
         // Add all of our inner mandates into the graph as nodes.
 
@@ -121,15 +122,45 @@ object Orderer {
           byConsequences.get(resource) foreach { befores =>
             befores foreach { before =>
               afters foreach { after =>
-                graph += DiEdge(before, after)
+                if ( before != after )
+                  graph += LDiEdge(before, after)(resource)
               }
             }
           }
         }
 
-        val r = graph.topologicalSort.right.get.toOuterNodes.toSeq.map(_.asInstanceOf[Mandate])
+        val ts = graph.topologicalSort
 
-        CompositeMandate(desc, r:_*)
+        ts match {
+          case Right(path) =>
+            CompositeMandate(desc, path.toOuterNodes.toSeq.map(_.asInstanceOf[Mandate]):_*)
+          case Left(cycle) =>
+            innards foreach { m =>
+              println(s"MANDATE: ${m.description}")
+              println(s"PREREQUISITES: ${m.prerequisites.mkString(",")}")
+              println(s"CONSEQUENCES: ${m.consequences.mkString(",")}")
+            }
+            println(cycle)
+
+            println("=====")
+            cycle.outerEdgeTraverser.foreach { e =>
+              println(e.head.description)
+              println(e.label)
+              println(e.last.description)
+            }
+
+            println("=====")
+//            graph.findCycle.foreach( c => c.foreach { i =>
+//              if ( i.isN)
+//              case n: graph#NodeBase =>
+//
+//              case e: EdgeBase =>
+//                println(e.getClass.getName)
+//                println(e)
+//            })
+
+            throw new RuntimeException(s"cycle detected: $cycle")
+        }
 
       case m =>
         // No inner mandates (not a composite), so there's no ordering to do...

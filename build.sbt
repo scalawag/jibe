@@ -14,6 +14,8 @@ resolvers ++= Seq (
 libraryDependencies ++= Seq(
   "com.jcraft" % "jsch" % "0.1.54",
   "org.scala-graph" %% "graph-core" % "1.11.2",
+  "org.scala-lang" % "scala-xml" % "2.11.0-M4",
+  "io.spray" %% "spray-json" % "1.3.2",
   "org.scalawag.timber" %% "timber-backend" % "0.6.0-SNAPSHOT",
   "org.scalawag.timber" %% "slf4j-over-timber" % "0.6.0-SNAPSHOT"
 )

@@ -1,41 +1,52 @@
 package org.scalawag.jibe.backend
 
-import java.io.ByteArrayOutputStream
+import java.io.{ByteArrayOutputStream, File, FileOutputStream}
 
 import com.jcraft.jsch.{ChannelExec, JSch, UserInfo}
+import org.scalawag.jibe.FileUtils._
 
 class Session(val s: com.jcraft.jsch.Session) {
   // Command can include bash scripting with ';' and '&&' and can use environment variables
 
-  def execute(command: String, sudo: Boolean = false): CommandResults = {
+  def execute(command: String, reportDir: File, sudo: Boolean = false): Int = {
     val c = s.openChannel("exec").asInstanceOf[ChannelExec]
-
-    val out = new ByteArrayOutputStream()
-    val err = new ByteArrayOutputStream()
-
     c.setInputStream(null)
 
-    c.setOutputStream(out)
-    c.setErrStream(err)
+    writeFileWithOutputStream(reportDir / "stdout") { out =>
+      writeFileWithOutputStream(reportDir / "stderr") { err =>
 
-    val actualCommand =
-      if ( sudo )
-        s"""sudo /bin/bash -c '
-            |$command
-            |'
-       """.stripMargin
-      else
-        command
+        c.setOutputStream(out)
+        c.setErrStream(err)
 
-    c.setCommand(actualCommand)
-    c.connect()
+        val actualCommand =
+          if ( sudo )
+            s"""sudo /bin/bash <<'EOS'
+                |$command
+                |EOS
+           """.stripMargin
+          else
+            command
 
-    while ( !c.isClosed )
-      Thread.sleep(50)
+        writeFileWithPrintWriter(reportDir / "script") { w =>
+          w.print(actualCommand)
+        }
 
-    c.disconnect()
+        c.setCommand(actualCommand)
+        c.connect()
 
-    CommandResults(command, c.getExitStatus, out.toString, err.toString)
+        // TODO: maybe not block here and use futures instead.
+        while ( !c.isClosed )
+          Thread.sleep(100)
+
+        c.disconnect()
+
+        writeFileWithPrintWriter(reportDir / "exitCode") { ec =>
+          ec.print(c.getExitStatus)
+        }
+      }
+    }
+
+    c.getExitStatus
   }
 }
 
