@@ -70,10 +70,15 @@ object Reporter {
   }
 
   private def commandTable(dir: File): NodeSeq = {
-    val testDir = dir / "test"
-    val performDir = dir / "perform"
+    val possibleDirsInOrder = List("test", "test/length_check", "test/content_check", "perform")
 
-    Seq(scriptTable("test", testDir), if ( performDir.exists() ) scriptTable("perform", performDir) else NodeSeq.Empty).flatten
+    possibleDirsInOrder.flatMap { n =>
+      val d = dir / n
+      // exitCode will always be present in a directory that represents script output.  Use that as an indicator.
+      if ( ( d / "exitCode" ).exists )
+        scriptTable(n, d)
+      else NodeSeq.Empty
+    }
   }
 
   def generate(input: File, output: File): Unit = {
