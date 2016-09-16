@@ -1,7 +1,9 @@
 package org.scalawag.jibe.backend
 
 import java.io.File
+
 import org.scalawag.jibe.FileUtils._
+import org.scalawag.jibe.mandate.{CompositeMandate, Mandate, MandateResults}
 
 object Executive {
   def apply(rootMandate: Mandate, ssh: SSHConnectionInfo, commander: Commander, reportDir: File) = {

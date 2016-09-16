@@ -1,4 +1,4 @@
-package org.scalawag.jibe.backend
+package org.scalawag.jibe.mandate
 
 case class CompositeMandate(override val description: Option[String], mandates: Mandate*) extends Mandate {
   override def consequences = mandates.flatMap(_.consequences)

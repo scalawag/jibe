@@ -1,6 +1,7 @@
 package org.scalawag.jibe.backend.ubuntu
 
 import org.scalawag.jibe.backend._
+import org.scalawag.jibe.mandate._
 
 trait BashCommands {
   protected[this] def mapify(raw: Iterable[(String, Any)]*): Map[String, String] = raw.flatten.toMap.mapValues(_.toString)

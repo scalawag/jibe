@@ -1,5 +1,7 @@
 package org.scalawag.jibe.backend
 
+import org.scalawag.jibe.mandate.{CompositeMandate, Mandate}
+
 import scala.annotation.tailrec
 import scalax.collection.{Graph, GraphBase}
 import scalax.collection.edge.LDiEdge

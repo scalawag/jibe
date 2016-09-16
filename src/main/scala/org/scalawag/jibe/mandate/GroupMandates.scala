@@ -1,4 +1,6 @@
-package org.scalawag.jibe.backend
+package org.scalawag.jibe.mandate
+
+import org.scalawag.jibe.backend.GroupResource
 
 case class Group(name: String,
                  gid: Option[Int] = None,

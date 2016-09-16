@@ -1,4 +1,6 @@
-package org.scalawag.jibe.backend
+package org.scalawag.jibe.mandate
+
+import org.scalawag.jibe.backend.{FileResource, GroupResource, UserResource}
 
 case class User(name: String,
                 primaryGroup: Option[String] = None,

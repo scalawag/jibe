@@ -2,10 +2,11 @@ package org.scalawag.jibe
 
 import java.io.{File, FileFilter}
 
-import org.scalawag.jibe.backend.{MandateResults, ShallowMandateResults}
+import org.scalawag.jibe.backend.ShallowMandateResults
 import spray.json._
 import org.scalawag.jibe.backend.ShallowMandateResults.JSON._
 import FileUtils._
+import org.scalawag.jibe.mandate.MandateResults
 
 import scala.io.Source
 import scala.xml.{Elem, NodeSeq}

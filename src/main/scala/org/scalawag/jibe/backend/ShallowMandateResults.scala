@@ -1,28 +1,14 @@
 package org.scalawag.jibe.backend
 
-case class MandateResults(mandate: Mandate,
-                          outcome: MandateResults.Outcome.Value,
-                          startTime: Long,
-                          endTime: Long,
-                          innards: Iterable[MandateResults] = Iterable.empty)
-
-object MandateResults {
-  object Outcome extends Enumeration {
-    val SUCCESS = Value
-    val FAILURE = Value
-    val USELESS = Value
-  }
-}
-
-import MandateResults.Outcome
+import org.scalawag.jibe.mandate.MandateResults.Outcome
 
 case class ShallowMandateResults(description: Option[String],
                                  composite: Boolean,
-                                 outcome: MandateResults.Outcome.Value,
+                                 outcome: Outcome.Value,
                                  startTime: Long,
                                  endTime: Long) {
-  def elapsedTime = endTime - startTime
-}
+                                   def elapsedTime = endTime - startTime
+                                 }
 
 object ShallowMandateResults {
   object JSON extends spray.json.DefaultJsonProtocol {
