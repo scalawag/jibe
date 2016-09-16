@@ -27,7 +27,8 @@ object Main {
       CreateOrUpdateGroup("personal"),
       CreateOrUpdateUser(User("pope", primaryGroup = Some("personal"), home = Some("/tmp"), uid = Some(5005))),
       CreatePersonalUser("ernie"),
-      CreatePersonalUser("bert")
+      CreatePersonalUser("bert"),
+      SendLocalFile(new File("build.sbt"), new File("/tmp/blah"))
     )
 
     val orderedMandate = Orderer.orderMandate(mandate)

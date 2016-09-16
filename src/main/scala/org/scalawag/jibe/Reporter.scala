@@ -9,6 +9,7 @@ import FileUtils._
 import org.scalawag.jibe.mandate.MandateResults
 
 import scala.io.Source
+import scala.util.Try
 import scala.xml.{Elem, NodeSeq}
 
 object Reporter {
@@ -18,7 +19,7 @@ object Reporter {
 
   private def scriptTable(label: String, dir: File): NodeSeq = {
     val exitCode = Source.fromFile(dir / "exitCode").mkString.toInt
-    val script = Source.fromFile(dir / "script").getLines()
+    val script = Try(Source.fromFile(dir / "script").getLines()).getOrElse(Iterator.empty)
     val output = Source.fromFile(dir / "output").getLines()
 
     val outputElems =

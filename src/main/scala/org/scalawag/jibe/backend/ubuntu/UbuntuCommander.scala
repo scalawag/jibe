@@ -1,5 +1,8 @@
 package org.scalawag.jibe.backend.ubuntu
 
+import java.io.{File, FileInputStream}
+
+import org.apache.commons.codec.digest.DigestUtils
 import org.scalawag.jibe.backend._
 import org.scalawag.jibe.mandate._
 
@@ -179,6 +182,36 @@ class CreateOrUpdateUserCommand(user: User) extends Command with BashCommands {
 
 case class BasicCommand(getPerformScript: String, getTestScript: String = "exit 1") extends Command
 
+class SendLocalFileCommand(src: File, dst: File) extends Command {
+
+  // TODO: This could be sped up by checking for the presence of the file (and/or length) prior to calculating the MD5 locally.
+
+  override protected def getTestScript = {
+    // Calculate MD5 of local file
+    val fis = new FileInputStream(src)
+    val localMd5 =
+      try {
+        DigestUtils.md5Hex(fis).toLowerCase
+      } finally {
+        fis.close()
+      }
+
+    s"""test -r "$dst" && test $$( md5sum "$dst" | awk '{ print $$1 }' ) == $localMd5"""
+  }
+
+  // TODO: Make this unnecessary by making Script-based commands a subclass of a more general command
+  override protected def getPerformScript = ???
+
+  override def perform(ssh: SSHConnectionInfo, dir: File) = {
+    val fis = new FileInputStream(src)
+    try {
+      Sessions.get(ssh).copy(fis, dst, src.getName, src.length, dir, ssh.sudo)
+    } finally {
+      fis.close()
+    }
+  }
+}
+
 object UbuntuCommander extends Commander with BashCommands {
 
   def getCommand(mandate: Mandate) = mandate match {
@@ -192,6 +225,8 @@ object UbuntuCommander extends Commander with BashCommands {
       BasicCommand(s"groupdel ${name}")
     case AddUserToGroups(user,groups@_*) =>
       new AddUserToGroupsCommand(user, groups:_*)
+    case SendLocalFile(src, dst) =>
+      new SendLocalFileCommand(src, dst)
     case _ =>
       throw new RuntimeException(s"Commander ${this.getClass.getName} does not support the mandate $mandate.")
   }

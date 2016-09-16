@@ -85,6 +85,41 @@ class Session(val s: com.jcraft.jsch.Session) {
       }
     }
   }
+
+  def copy(in: InputStream, remotePath: File, name: String, length: Long, reportDir: File, sudo: Boolean = false, mode: String = "0644"): Int = {
+    val c = s.openChannel("exec").asInstanceOf[ChannelExec]
+
+    import scala.collection.JavaConversions._
+    val realIn = new SequenceInputStream(Iterator(
+      new ByteArrayInputStream(s"C$mode $length $name\n".getBytes),
+      in,
+      new ByteArrayInputStream(Array(0.toByte))
+    ))
+    c.setInputStream(realIn)
+
+    writeFileWithOutputStream(reportDir / "output") { out =>
+      val demux = new DemuxOutputStream(out)
+      c.setOutputStream(demux.createChannel("O:"))
+      c.setErrStream(demux.createChannel("E:"))
+
+      val command = s"${ if ( sudo ) "sudo " else "" }/usr/bin/scp -t $remotePath"
+
+      c.setCommand(command)
+      c.connect()
+
+      // TODO: maybe not block here and use futures instead.
+      while ( !c.isClosed )
+        Thread.sleep(100)
+
+      c.disconnect()
+
+      writeFileWithPrintWriter(reportDir / "exitCode") { ec =>
+        ec.print(c.getExitStatus)
+      }
+    }
+
+    c.getExitStatus
+  }
 }
 
 object Sessions {
