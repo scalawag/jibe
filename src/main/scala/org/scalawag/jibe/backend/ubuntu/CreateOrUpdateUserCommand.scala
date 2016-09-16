@@ -26,7 +26,7 @@ class CreateOrUpdateUserCommand(user: User) extends Command with BashCommands {
       user.primaryGroup map { groupName =>
         s"""  gname=$$( awk -F: '$$3 == '$${parts[3]}' { print $$1 }' /etc/group )
            |  if [ "$$gname" != "$groupName" ]; then exit 1; fi
-         """.stripMargin
+""".stripMargin
       }
 
     val script =
@@ -36,14 +36,12 @@ class CreateOrUpdateUserCommand(user: User) extends Command with BashCommands {
              |if [ $${#parts[*]} -eq 0 ]; then
              |  exit 1
              |else
-           """.stripMargin).toIterable,
-        conditions.toIterable,
+""".stripMargin).toIterable,
+        conditions,
         groupCondition.toIterable,
         Some(
-          s"""
-             |  exit 0
-             |fi
-           """.stripMargin
+          s"""  exit 0
+             |fi""".stripMargin
         ).toIterable
       ).flatten.mkString
     ssh(sshConnectionInfo, script, dir)
