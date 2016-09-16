@@ -14,27 +14,31 @@ trait BashCommands {
 
 class AddUserToGroupsCommand(user: String, group: String*) extends Command with BashCommands {
 
-  override protected def getTestScript = {
-    s"""
-       |existingGroups=$$( groups "$user" )
-       |for testGroup in ${group.mkString(" ")}; do
-       |  echo $$existingGroups | grep -w $$testGroup
-       |  if [ $$? != 0 ]; then
-       |    exit 1
-       |  fi
-       |done
-       |
-       |exit 0
-     """.stripMargin
+  override def test(sshConnectionInfo: SSHConnectionInfo, dir: File) = {
+    val script =
+      s"""
+         |existingGroups=$$( groups "$user" )
+         |for testGroup in ${group.mkString(" ")}; do
+         |  echo $$existingGroups | grep -w $$testGroup
+         |  if [ $$? != 0 ]; then
+         |    exit 1
+         |  fi
+         |done
+         |
+         |exit 0
+       """.stripMargin
+    ssh(sshConnectionInfo, script, dir)
   }
 
-  override protected def getPerformScript =
-    s"usermod -G ${group.mkString(",")} -a $user"
+  override def perform(sshConnectionInfo: SSHConnectionInfo, dir: File) = {
+    val script = s"usermod -G ${group.mkString(",")} -a $user"
+    ssh(sshConnectionInfo, script, dir)
+  }
 }
 
 class CreateOrUpdateGroupCommand(group: Group) extends Command with BashCommands {
 
-  override protected def getTestScript = {
+  override def test(sshConnectionInfo: SSHConnectionInfo, dir: File) = {
     val elif =
       group.gid match {
         case Some(gid) =>
@@ -47,18 +51,20 @@ class CreateOrUpdateGroupCommand(group: Group) extends Command with BashCommands
           ""
       }
 
-    s"""
-       |gid=$$( awk -F: '$$1 == "${group.name}" { print $$3 }' /etc/group )
-       |if [ -z "$$gid" ]; then
-       |  exit 1
-       |$elif
-       |else
-       |  exit 0
-       |fi
-     """.stripMargin
+    val script =
+      s"""
+         |gid=$$( awk -F: '$$1 == "${group.name}" { print $$3 }' /etc/group )
+         |if [ -z "$$gid" ]; then
+         |  exit 1
+         |$elif
+         |else
+         |  exit 0
+         |fi
+       """.stripMargin
+    ssh(sshConnectionInfo, script, dir)
   }
 
-  override protected def getPerformScript = {
+  override def perform(sshConnectionInfo: SSHConnectionInfo, dir: File) = {
 
     val commonOptions = mapify(
       group.gid.map( gid => "--gid" -> gid)
@@ -90,13 +96,14 @@ class CreateOrUpdateGroupCommand(group: Group) extends Command with BashCommands
            |fi
         """.stripMargin.trim
 
-    Iterable(groupadd,groupmod).mkString("\n")
+    val script = Iterable(groupadd,groupmod).mkString("\n")
+    ssh(sshConnectionInfo, script, dir)
   }
 }
 
 class CreateOrUpdateUserCommand(user: User) extends Command with BashCommands {
 
-  override protected def getTestScript = {
+  override def test(sshConnectionInfo: SSHConnectionInfo, dir: File) = {
     // These are where the parts we may care about live in the lines in /etc/passwd.  Primary group requires special
     // handling because it's a reference
 
@@ -119,25 +126,27 @@ class CreateOrUpdateUserCommand(user: User) extends Command with BashCommands {
          """.stripMargin
       }
 
-    Seq(
-      Some(
-        s"""IFS=":" read -a parts <<< $$( grep ^${user.name}: /etc/passwd )
-           |if [ $${#parts[*]} -eq 0 ]; then
-           |  exit 1
-           |else
-         """.stripMargin).toIterable,
-      conditions.toIterable,
-      groupCondition.toIterable,
-      Some(
-        s"""
-           |  exit 0
-           |fi
-         """.stripMargin
-      ).toIterable
-    ).flatten.mkString
+    val script =
+      Seq(
+        Some(
+          s"""IFS=":" read -a parts <<< $$( grep ^${user.name}: /etc/passwd )
+             |if [ $${#parts[*]} -eq 0 ]; then
+             |  exit 1
+             |else
+           """.stripMargin).toIterable,
+        conditions.toIterable,
+        groupCondition.toIterable,
+        Some(
+          s"""
+             |  exit 0
+             |fi
+           """.stripMargin
+        ).toIterable
+      ).flatten.mkString
+    ssh(sshConnectionInfo, script, dir)
   }
 
-  override protected def getPerformScript = {
+  override def perform(sshConnectionInfo: SSHConnectionInfo, dir: File) = {
     val commonOptions = mapify(
       user.uid.map( uid => "--uid" -> uid),
       user.comment.map( comment => "--comment" -> comment),
@@ -176,17 +185,17 @@ class CreateOrUpdateUserCommand(user: User) extends Command with BashCommands {
            |fi
       """.stripMargin.trim
 
-    Iterable(useradd,usermod).mkString("\n")
+    val script = Iterable(useradd,usermod).mkString("\n")
+    ssh(sshConnectionInfo, script, dir)
   }
 }
-
-case class BasicCommand(getPerformScript: String, getTestScript: String = "exit 1") extends Command
 
 class SendLocalFileCommand(src: File, dst: File) extends Command {
 
   // TODO: This could be sped up by checking for the presence of the file (and/or length) prior to calculating the MD5 locally.
 
-  override protected def getTestScript = {
+
+  override def test(sshConnectionInfo: SSHConnectionInfo, dir: File) = {
     // Calculate MD5 of local file
     val fis = new FileInputStream(src)
     val localMd5 =
@@ -196,20 +205,10 @@ class SendLocalFileCommand(src: File, dst: File) extends Command {
         fis.close()
       }
 
-    s"""test -r "$dst" && test $$( md5sum "$dst" | awk '{ print $$1 }' ) == $localMd5"""
+    ssh(sshConnectionInfo, s"""test -r "$dst" && test $$( md5sum "$dst" | awk '{ print $$1 }' ) == $localMd5""", dir)
   }
 
-  // TODO: Make this unnecessary by making Script-based commands a subclass of a more general command
-  override protected def getPerformScript = ???
-
-  override def perform(ssh: SSHConnectionInfo, dir: File) = {
-    val fis = new FileInputStream(src)
-    try {
-      Sessions.get(ssh).copy(fis, dst, src.getName, src.length, dir, ssh.sudo)
-    } finally {
-      fis.close()
-    }
-  }
+  override def perform(sshConnectionInfo: SSHConnectionInfo, dir: File) = scp(sshConnectionInfo, src, dst, dir)
 }
 
 object UbuntuCommander extends Commander with BashCommands {
@@ -217,12 +216,12 @@ object UbuntuCommander extends Commander with BashCommands {
   def getCommand(mandate: Mandate) = mandate match {
     case CreateOrUpdateUser(user) =>
       new CreateOrUpdateUserCommand(user)
-    case DeleteUser(name) =>
-      BasicCommand(s"userdel ${name}")
+//    case DeleteUser(name) =>
+//      BasicCommand(s"userdel ${name}")
     case CreateOrUpdateGroup(group) =>
       new CreateOrUpdateGroupCommand(group)
-    case DeleteGroup(name) =>
-      BasicCommand(s"groupdel ${name}")
+//    case DeleteGroup(name) =>
+//      BasicCommand(s"groupdel ${name}")
     case AddUserToGroups(user,groups@_*) =>
       new AddUserToGroupsCommand(user, groups:_*)
     case SendLocalFile(src, dst) =>
