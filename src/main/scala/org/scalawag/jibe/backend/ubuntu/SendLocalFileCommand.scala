@@ -13,7 +13,22 @@ class SendLocalFileCommand(src: File, dst: File) extends Command {
 
     // Do a quick check that it exists and is the right length before proceeding.
 
-    val ec = ssh(sshConnectionInfo, s"""test -r "$dst" -a $$( stat -c %s "$dst" ) == ${src.length}""", dir / "length_check")
+    val ec = ssh(sshConnectionInfo,
+      s"""
+         |llen=${src.length}
+         |rpath="${dst}"
+         |if [ ! -r "$$rpath" ]; then
+         |  echo "remote file does not exist"
+         |  exit 1
+         |else
+         |  rlen=$$( stat -c %s "$$rpath" )
+         |  if [ $$llen != $$rlen ]; then
+         |    echo "len(local)  = $$llen"
+         |    echo "len(remote) = $$rlen"
+         |    exit 1
+         |  fi
+         |fi
+      """.stripMargin.trim, dir / "length_check")
 
     if ( ec != 0 ) {
       // File is missing or length is incorrect.  It failed the test without checksum calculation.
@@ -29,7 +44,22 @@ class SendLocalFileCommand(src: File, dst: File) extends Command {
           fis.close()
         }
 
-      ssh(sshConnectionInfo, s"""test -r "$dst" -a $$( md5sum "$dst" | awk '{ print $$1 }' ) == $localMd5""", dir / "content_check")
+      ssh(sshConnectionInfo,
+        s"""
+           |lmd5=${localMd5}
+           |rpath="${dst}"
+           |if [ ! -r "$$rpath" ]; then
+           |  echo "remote file does not exist"
+           |  exit 1
+           |else
+           |  rmd5=$$( md5sum "$$rpath" | awk '{ print $$1 }' )
+           |  if [ $$lmd5 != $$rmd5 ]; then
+           |    echo "md5(local)  = $$lmd5"
+           |    echo "md5(remote) = $$rmd5"
+           |    exit 1
+           |  fi
+           |fi
+        """.stripMargin.trim, dir / "content_check")
     }
   }
 
