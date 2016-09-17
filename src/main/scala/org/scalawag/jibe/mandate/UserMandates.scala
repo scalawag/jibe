@@ -7,8 +7,7 @@ case class User(name: String,
                 uid: Option[Int] = None,
                 home: Option[String] = None,
                 shell: Option[String] = None,
-                comment: Option[Option[String]] = None,
-                expiry: Option[Option[String]] = None,
+                comment: Option[String] = None,
                 system: Boolean = false)
 
 object User {

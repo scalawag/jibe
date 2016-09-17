@@ -4,6 +4,8 @@ import java.io._
 
 import org.scalawag.jibe.FileUtils._
 
+import scala.io.Source
+
 trait Command {
   def test(sshConnectionInfo: SSHConnectionInfo, dir: File): Int
   def perform(sshConnectionInfo: SSHConnectionInfo, dir: File): Int
@@ -23,11 +25,33 @@ trait Command {
      reportDir
     )
 
+  def sshResource(sshConnectionInfo: SSHConnectionInfo, script: String, context: Map[String, Any], reportDir: File): Int = {
+    val scriptResource = Option(this.getClass.getResourceAsStream(script)) getOrElse {
+      throw new RuntimeException(s"unable to load script resource from classpath: $script")
+    }
+    val scriptLines = Source.fromInputStream(scriptResource).getLines
+
+    val contextLines = context map { case (k,v) => s"""$k="$v"""" }
+
+    val fullScript =
+      if ( sshConnectionInfo.sudo )
+        Iterable("sudo /bin/bash <<'EOS'") ++ contextLines ++ scriptLines ++ Iterable("EOS")
+      else
+        contextLines ++ scriptLines
+
+    exec(
+      sshConnectionInfo,
+      fullScript.mkString(endl),
+      null,
+      reportDir
+    )
+  }
+
   def scp(sshConnectionInfo: SSHConnectionInfo, source: File, destination: File, reportDir: File, mode: String = "0644"): Int = {
     import scala.collection.JavaConversions._
     exec(
       sshConnectionInfo,
-      s"${ if ( sshConnectionInfo.sudo ) "sudo " else "" }/usr/bin/scp -t $destination",
+      s"${ if ( sshConnectionInfo.sudo ) "/usr/bin/sudo " else "" }/usr/bin/scp -t $destination",
       new SequenceInputStream(Iterator(
         new ByteArrayInputStream(s"C$mode ${source.length} ${source.getName}\n".getBytes),
         new FileInputStream(source),

@@ -26,5 +26,8 @@ libraryDependencies ++= Seq (
   "org.scalamock" %% "scalamock-scalatest-support" % "3.2.2"
 ) map ( _ % "test" )
 
+// TODO: Ideally, this should only grab the .sh files and not the .scala files
+unmanagedResourceDirectories in Compile ++= ( sourceDirectories in Compile ).value
+
 enablePlugins(JavaServerAppPackaging)
 
