@@ -3,9 +3,8 @@ package org.scalawag.jibe.backend
 import org.scalawag.jibe.mandate.{CompositeMandate, Mandate}
 
 import scala.annotation.tailrec
-import scalax.collection.{Graph, GraphBase}
+import scalax.collection.Graph
 import scalax.collection.edge.LDiEdge
-import scalax.collection.immutable.DefaultGraphImpl
 
 object Orderer {
 
@@ -99,7 +98,7 @@ object Orderer {
         // Add all of our inner mandates into the graph as nodes.
 
         innards.foreach { m =>
-          graph += mandate
+          graph += m
         }
 
         // Add implicit orderings (from resource dependencies)
