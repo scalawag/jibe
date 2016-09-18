@@ -1,5 +1,5 @@
 PATH=/usr/sbin
-opts="${group_gid:+-g $group_id}"
+opts="${group_gid:+-g $group_gid}"
 
 groupadd $opts ${user_system:+-s} ${group_name}
 if [ $? -eq 9 ]; then
