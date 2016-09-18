@@ -3,13 +3,7 @@ package org.scalawag.jibe.backend.ubuntu
 import org.scalawag.jibe.backend._
 import org.scalawag.jibe.mandate._
 
-trait BashCommands {
-  protected[this] def mapify(raw: Iterable[(String, Any)]*): Map[String, String] = raw.flatten.toMap.mapValues(_.toString)
-
-  protected[this] def formatOptions(opts: Map[String, String]) = opts.map { case (k, v) => s"$k $v" }.mkString(" ")
-}
-
-object UbuntuCommander extends Commander with BashCommands {
+object UbuntuCommander extends Commander {
 
   def getCommand(mandate: Mandate) = mandate match {
     case CreateOrUpdateUser(user) =>
