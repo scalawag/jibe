@@ -12,7 +12,7 @@ object Executive {
       val (results, shallowResults) =
         mandate match {
 
-          case CompositeMandate(desc, innards@_*) =>
+          case CompositeMandate(desc, innards, _) =>
             val width = math.log10(innards.length).toInt + 1
 
             val startTime = System.currentTimeMillis

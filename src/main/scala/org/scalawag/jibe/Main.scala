@@ -41,27 +41,33 @@ object Main {
 
       mandate match {
         case cm: CompositeMandate =>
-          pw.println(s"${prefix}CompositeMandate(${cm.description})")
+          val desc = s"${ if ( cm.fixedOrder ) "[FIXED] " else "" }${cm.description.getOrElse("<unnamed composite>")}"
+          pw.println(prefix + desc)
           cm.mandates.foreach(dumpMandate(pw, _, depth + 1))
         case m =>
-          pw.println(prefix + m)
+          pw.println(prefix + m.description.getOrElse(m.toString))
       }
     }
 
-    val orderedMandate = Orderer.orderMandate(mandate)
+    try {
+      val orderedMandate = Orderer.order(mandate)
 
-    log.debug { pw: PrintWriter =>
-      pw.println("mandates before/after ordering:")
-      dumpMandate(pw, mandate)
-      pw.println("=" * 120)
-      dumpMandate(pw, orderedMandate)
+      log.debug { pw: PrintWriter =>
+        pw.println("mandates before/after ordering:")
+        dumpMandate(pw, mandate)
+        pw.println("=" * 120)
+        dumpMandate(pw, orderedMandate)
+      }
+
+      val date = ISO8601TimestampFormatter(TimeZone.getTimeZone("UTC")).format(System.currentTimeMillis)
+      val resultsDir = new File("results") / date
+      val results = Executive.apply(orderedMandate, ssh, UbuntuCommander, resultsDir / "raw")
+
+      Reporter.generate(resultsDir / "raw", resultsDir / "html" / "index.html")
+    } catch {
+      case ex: AbortException => // System.exit(1) - bad within sbt
+    } finally {
+      Sessions.shutdown
     }
-
-    val date = ISO8601TimestampFormatter(TimeZone.getTimeZone("UTC")).format(System.currentTimeMillis)
-    val resultsDir = new File("results") / date
-    val results = Executive.apply(orderedMandate, ssh, UbuntuCommander, resultsDir / "raw")
-
-    Reporter.generate(resultsDir / "raw", resultsDir / "html" / "index.html")
-    Sessions.shutdown
   }
 }
