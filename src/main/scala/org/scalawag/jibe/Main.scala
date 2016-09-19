@@ -63,7 +63,7 @@ object Main {
       val resultsDir = new File("results") / date
       val results = Executive.apply(orderedMandate, ssh, UbuntuCommander, resultsDir / "raw")
 
-      Reporter.generate(resultsDir / "raw", resultsDir / "html" / "index.html")
+      Reporter.generate(resultsDir / "raw", resultsDir / "html" / "index.html", resultsDir.getParentFile / "latest.html")
     } catch {
       case ex: AbortException => // System.exit(1) - bad within sbt
     } finally {
