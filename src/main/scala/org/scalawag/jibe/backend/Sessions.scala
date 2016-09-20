@@ -4,21 +4,21 @@ import com.jcraft.jsch.{ChannelExec, JSch, Session, UserInfo}
 
 object Sessions {
   private[this] val jsch = new JSch
-  private[this] var sessions = Map.empty[SSHConnectionInfo, Session]
+  private[this] var sessions = Map.empty[Target, Session]
 
-  def get(info: SSHConnectionInfo): Session = {
-    sessions.get(info) map { s =>
+  def get(target: Target): Session = {
+    sessions.get(target) map { s =>
       if ( s.isConnected )
         s
       else {
-        sessions -= info
-        get(info)
+        sessions -= target
+        get(target)
       }
     } getOrElse {
-      val s = jsch.getSession(info.username, info.host, info.port)
+      val s = jsch.getSession(target.username, target.hostname, target.port)
       s.setUserInfo(new UserInfo {
         override def getPassphrase() = ""
-        override def getPassword() = info.password
+        override def getPassword() = target.password
         override def promptPassword(message: String) = true
         override def promptPassphrase(message: String) = false
         override def promptYesNo(message: String) = false
@@ -31,14 +31,14 @@ object Sessions {
 
       s.connect(30) // TODO: configurable
 
-      sessions += info -> s
+      sessions += target -> s
 
       s
     }
   }
 
-  def withChannel[A](sshConnectionInfo: SSHConnectionInfo)(fn: ChannelExec => A): A = {
-    val c = Sessions.get(sshConnectionInfo).openChannel("exec").asInstanceOf[ChannelExec]
+  def withChannel[A](target: Target)(fn: ChannelExec => A): A = {
+    val c = Sessions.get(target).openChannel("exec").asInstanceOf[ChannelExec]
     try {
       fn(c)
     } finally {

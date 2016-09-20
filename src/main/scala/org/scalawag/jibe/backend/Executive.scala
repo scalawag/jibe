@@ -3,10 +3,31 @@ package org.scalawag.jibe.backend
 import java.io.File
 
 import org.scalawag.jibe.FileUtils._
+import org.scalawag.jibe.backend.JsonFormat.ShallowMandateResults
 import org.scalawag.jibe.mandate.{CompositeMandate, Mandate, MandateResults}
 
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Future}
+
 object Executive {
-  def apply(rootMandate: Mandate, ssh: SSHConnectionInfo, commander: Commander, reportDir: File) = {
+  def execute(targets: Map[Target, Mandate], reportDir: File) = {
+    val futures = targets map { case (t, m) =>
+      Future {
+        val dir = reportDir / s"${t.username}@${t.hostname}:${t.port}"
+        this.apply(m, t, dir)
+        writeFileWithPrintWriter(dir / "target.js") { pw =>
+          import spray.json._
+          import JsonFormat._
+          pw.write(PersistentTarget(t).toJson.prettyPrint)
+        }
+      }
+    }
+
+    Await.ready(Future.sequence(futures), Duration.Inf)
+  }
+
+  def apply(rootMandate: Mandate, target: Target, reportDir: File) = {
 
     def execute(mandate: Mandate, reportDir: File): MandateResults = {
       val (results, shallowResults) =
@@ -41,11 +62,11 @@ object Executive {
 
           case m =>
 
-            val command = commander.getCommand(m)
+            val command = target.commander.getCommand(m)
 
             val startTime = System.currentTimeMillis
 
-            val testExitCode = command.test(ssh, reportDir / "test")
+            val testExitCode = command.test(target, reportDir / "test")
             if (testExitCode == 0) {
               val endTime = System.currentTimeMillis
 
@@ -54,7 +75,7 @@ object Executive {
                 ShallowMandateResults(mandate.description, false, MandateResults.Outcome.USELESS, startTime, endTime)
               )
             } else {
-              val performExitCode = command.perform(ssh, reportDir / "perform")
+              val performExitCode = command.perform(target, reportDir / "perform")
 
               val outcome =
                 if (performExitCode == 0)
@@ -73,8 +94,8 @@ object Executive {
         }
 
       writeFileWithPrintWriter(reportDir / "results.js") { pw =>
-        import ShallowMandateResults.JSON._
         import spray.json._
+        import JsonFormat._
         pw.write(shallowResults.toJson.prettyPrint)
       }
 

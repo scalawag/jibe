@@ -3,7 +3,7 @@ package org.scalawag.jibe.backend.ubuntu
 import java.io.File
 import scala.reflect.runtime.universe._
 import scala.reflect.runtime.currentMirror
-import org.scalawag.jibe.backend.{Command, SSHConnectionInfo}
+import org.scalawag.jibe.backend.{Command, Target}
 
 import scala.reflect.ClassTag
 
@@ -32,9 +32,9 @@ trait ScriptResourceCommand extends Command {
 
   private[this] val scriptPrefix = this.getClass.getSimpleName
 
-  override def test(sshConnectionInfo: SSHConnectionInfo, dir: File) =
-    sshResource(sshConnectionInfo, s"${scriptPrefix}_test.sh", getScriptContext, dir)
+  override def test(target: Target, dir: File) =
+    sshResource(target, s"${scriptPrefix}_test.sh", getScriptContext, dir)
 
-  override def perform(sshConnectionInfo: SSHConnectionInfo, dir: File) =
-    sshResource(sshConnectionInfo, s"${scriptPrefix}_perform.sh", getScriptContext, dir)
+  override def perform(target: Target, dir: File) =
+    sshResource(target, s"${scriptPrefix}_perform.sh", getScriptContext, dir)
 }

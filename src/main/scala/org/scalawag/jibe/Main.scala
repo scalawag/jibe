@@ -13,7 +13,13 @@ import Logging._
 object Main {
 
   def main(args: Array[String]): Unit = {
-    val ssh = SSHConnectionInfo("localhost", "vagrant", "vagrant", 2222, sudo = true)
+
+    val targets = Iterable(
+      "192.168.212.11",
+      "192.168.212.12"
+    ) map { ip =>
+      Target(ip, "vagrant", "vagrant", 22, UbuntuCommander, sudo = true)
+    }
 
     def CreateEveryoneUser(name: String) =
       CompositeMandate(s"create personal user: $name",
@@ -61,7 +67,7 @@ object Main {
 
       val date = ISO8601TimestampFormatter(TimeZone.getTimeZone("UTC")).format(System.currentTimeMillis)
       val resultsDir = new File("results") / date
-      val results = Executive.apply(orderedMandate, ssh, UbuntuCommander, resultsDir / "raw")
+      val results = Executive.execute(targets.map(_ -> orderedMandate).toMap, resultsDir / "raw")
 
       Reporter.generate(resultsDir / "raw", resultsDir / "html" / "index.html")
     } catch {

@@ -2,15 +2,14 @@ package org.scalawag.jibe
 
 import java.io.{File, FileFilter}
 
-import org.scalawag.jibe.backend.ShallowMandateResults
 import spray.json._
-import org.scalawag.jibe.backend.ShallowMandateResults.JSON._
 import FileUtils._
+import org.scalawag.jibe.backend.JsonFormat.{PersistentTarget, ShallowMandateResults}
 import org.scalawag.jibe.mandate.MandateResults
 
 import scala.io.Source
 import scala.util.Try
-import scala.xml.{Elem, NodeSeq}
+import scala.xml.NodeSeq
 
 object Reporter {
   private val dirFilter = new FileFilter {
@@ -81,51 +80,67 @@ object Reporter {
     }
   }
 
+  def mandate(dir: File): NodeSeq = {
+    val mr = Source.fromFile(dir / "results.js").mkString.parseJson.convertTo[ShallowMandateResults]
+
+    val outcomeColor = mr.outcome match {
+      case MandateResults.Outcome.SUCCESS => "green"
+      case MandateResults.Outcome.FAILURE => "red"
+      case MandateResults.Outcome.USELESS => "yellow"
+//      case MandateResults.Outcome.SUCCESS => ("#4F8A10","#DFF2BF")
+//      case MandateResults.Outcome.FAILURE => ("#D8000C","#FFBABA")
+//      case MandateResults.Outcome.USELESS => ("#9F6000","#FEEFB3")
+    }
+
+    val header =
+      <tr bgcolor={outcomeColor}>
+        <td>+<!-- &#x2795; &#x2796; --></td>
+        <td>{mr.description.getOrElse("")}</td>
+        <td>{mr.elapsedTime} ms</td>
+        <td>{mr.outcome}</td>
+      </tr>
+
+    val innards =
+      <td colspan="4">
+        <table border="1" style="margin-left: 2em">
+          {
+          if ( mr.composite ) {
+            dir.listFiles(dirFilter).flatMap(mandate).toSeq
+          } else {
+            commandTable(dir)
+          }
+          }
+        </table>
+      </td>
+
+    Seq(header,innards)
+  }
+
+  def targets(dir: File): NodeSeq = {
+    dir.listFiles(dirFilter) flatMap { d =>
+      val t = Source.fromFile(d / "target.js").mkString.parseJson.convertTo[PersistentTarget]
+
+      <tr>
+        <td>{t.username}@{t.hostname}:{t.port} ({t.commander})</td>
+      </tr>
+      <tr>
+        <td>
+          <table border="1" style="margin-left: 2em">
+            { mandate(d) }
+          </table>
+        </td>
+      </tr>
+    } toSeq
+  }
+
   def generate(input: File, output: File): Unit = {
 
     FileUtils.writeFileWithPrintWriter(output) { pw =>
-
-      def mandate(dir: File): NodeSeq = {
-        val mr = Source.fromFile(dir / "results.js").mkString.parseJson.convertTo[ShallowMandateResults]
-
-        val outcomeColor = mr.outcome match {
-          case MandateResults.Outcome.SUCCESS => "green"
-          case MandateResults.Outcome.FAILURE => "red"
-          case MandateResults.Outcome.USELESS => "yellow"
-//        case MandateResults.Outcome.SUCCESS => ("#4F8A10","#DFF2BF")
-//        case MandateResults.Outcome.FAILURE => ("#D8000C","#FFBABA")
-//        case MandateResults.Outcome.USELESS => ("#9F6000","#FEEFB3")
-        }
-
-        val header =
-          <tr bgcolor={outcomeColor}>
-            <td>+<!-- &#x2795; &#x2796; --></td>
-            <td>{mr.description.getOrElse("")}</td>
-            <td>{mr.elapsedTime} ms</td>
-            <td>{mr.outcome}</td>
-          </tr>
-
-        val innards =
-          <td colspan="4">
-            <table border="1" style="margin-left: 2em">
-              {
-                if ( mr.composite ) {
-                  dir.listFiles(dirFilter).flatMap(mandate).toSeq
-                } else {
-                  commandTable(dir)
-                }
-              }
-            </table>
-          </td>
-
-        Seq(header,innards)
-      }
-
       pw.println(
         <html>
           <body>
             <table border="1">
-              { mandate(input) }
+              { targets(input) }
             </table>
           </body>
         </html>

@@ -7,15 +7,15 @@ import org.scalawag.jibe.FileUtils._
 import scala.io.Source
 
 trait Command {
-  def test(sshConnectionInfo: SSHConnectionInfo, dir: File): Int
-  def perform(sshConnectionInfo: SSHConnectionInfo, dir: File): Int
+  def test(target: Target, dir: File): Int
+  def perform(target: Target, dir: File): Int
 
   // Command can include bash scripting with ';' and '&&' and can use environment variables
 
-  def ssh(sshConnectionInfo: SSHConnectionInfo, command: String, reportDir: File): Int =
+  def ssh(target: Target, command: String, reportDir: File): Int =
     exec(
-      sshConnectionInfo,
-      if ( sshConnectionInfo.sudo )
+      target,
+      if ( target.sudo )
         s"""sudo /bin/bash <<'EOS'
            |$command
            |EOS""".stripMargin
@@ -25,7 +25,7 @@ trait Command {
      reportDir
     )
 
-  def sshResource(sshConnectionInfo: SSHConnectionInfo, script: String, context: Map[String, Any], reportDir: File): Int = {
+  def sshResource(target: Target, script: String, context: Map[String, Any], reportDir: File): Int = {
     val scriptResource = Option(this.getClass.getResourceAsStream(script)) getOrElse {
       throw new RuntimeException(s"unable to load script resource from classpath: $script")
     }
@@ -34,24 +34,24 @@ trait Command {
     val contextLines = context map { case (k,v) => s"""$k="$v"""" }
 
     val fullScript =
-      if ( sshConnectionInfo.sudo )
+      if ( target.sudo )
         Iterable("sudo /bin/bash <<'EOS'") ++ contextLines ++ scriptLines ++ Iterable("EOS")
       else
         contextLines ++ scriptLines
 
     exec(
-      sshConnectionInfo,
+      target,
       fullScript.mkString(endl),
       null,
       reportDir
     )
   }
 
-  def scp(sshConnectionInfo: SSHConnectionInfo, source: File, destination: File, reportDir: File, mode: String = "0644"): Int = {
+  def scp(target: Target, source: File, destination: File, reportDir: File, mode: String = "0644"): Int = {
     import scala.collection.JavaConversions._
     exec(
-      sshConnectionInfo,
-      s"${ if ( sshConnectionInfo.sudo ) "/usr/bin/sudo " else "" }/usr/bin/scp -t $destination",
+      target,
+      s"${ if ( target.sudo ) "/usr/bin/sudo " else "" }/usr/bin/scp -t $destination",
       new SequenceInputStream(Iterator(
         new ByteArrayInputStream(s"C$mode ${source.length} ${source.getName}\n".getBytes),
         new FileInputStream(source),
@@ -61,8 +61,8 @@ trait Command {
     )
   }
 
-  private[this] def exec(sshConnectionInfo: SSHConnectionInfo, command: String, stdin: InputStream, reportDir: File): Int =
-    Sessions.withChannel(sshConnectionInfo) { c =>
+  private[this] def exec(target: Target, command: String, stdin: InputStream, reportDir: File): Int =
+    Sessions.withChannel(target) { c =>
       c.setInputStream(stdin)
 
       writeFileWithOutputStream(reportDir / "output") { out =>
