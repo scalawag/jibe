@@ -9,7 +9,7 @@ import org.scalawag.jibe.mandate.MandateResults
 
 import scala.io.Source
 import scala.util.Try
-import scala.xml.NodeSeq
+import scala.xml.{Elem, NodeSeq}
 
 object Reporter {
   private val dirFilter = new FileFilter {
@@ -119,15 +119,22 @@ object Reporter {
   def targets(dir: File): NodeSeq = {
     dir.listFiles(dirFilter) flatMap { d =>
       val t = Source.fromFile(d / "target.js").mkString.parseJson.convertTo[PersistentTarget]
+      val exceptionFile = d / "exception"
+      val innards: Elem =
+        if ( exceptionFile.exists ) {
+          <pre>{ Source.fromFile(exceptionFile).mkString }</pre>
+        } else {
+          <table border="1" style="margin-left: 2em">
+            { mandate(d) }
+          </table>
+        }
 
       <tr>
         <td>{t.username}@{t.hostname}:{t.port} ({t.commander})</td>
       </tr>
       <tr>
         <td>
-          <table border="1" style="margin-left: 2em">
-            { mandate(d) }
-          </table>
+          {innards}
         </td>
       </tr>
     } toSeq

@@ -15,7 +15,12 @@ object Executive {
     val futures = targets map { case (t, m) =>
       Future {
         val dir = reportDir / s"${t.username}@${t.hostname}:${t.port}"
-        this.apply(m, t, dir)
+        try {
+          this.apply(m, t, dir)
+        } catch {
+          case ex: Exception =>
+            writeFileWithPrintWriter(dir / "exception")(ex.printStackTrace)
+        }
         writeFileWithPrintWriter(dir / "target.js") { pw =>
           import spray.json._
           import JsonFormat._
