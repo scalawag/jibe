@@ -69,7 +69,7 @@ object Main {
       val resultsDir = new File("results") / date
       val results = Executive.execute(targets.map(_ -> orderedMandate).toMap, resultsDir / "raw")
 
-      Reporter.generate(resultsDir / "raw", resultsDir / "html" / "index.html")
+      Reporter.generate(resultsDir / "raw", resultsDir / "html" / "index.html", resultsDir.getParentFile / "latest.html")
     } catch {
       case ex: AbortException => // System.exit(1) - bad within sbt
     } finally {

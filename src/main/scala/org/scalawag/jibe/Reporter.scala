@@ -1,6 +1,7 @@
 package org.scalawag.jibe
 
 import java.io.{File, FileFilter}
+import java.nio.file.{Files, Path, Paths}
 
 import spray.json._
 import FileUtils._
@@ -140,7 +141,7 @@ object Reporter {
     } toSeq
   }
 
-  def generate(input: File, output: File): Unit = {
+  def generate(input: File, output: File, symlink: File ): Unit = {
 
     FileUtils.writeFileWithPrintWriter(output) { pw =>
       pw.println(
@@ -153,5 +154,15 @@ object Reporter {
         </html>
       )
     }
+
+    try {
+      val symlinkPath = symlink.toPath
+      Files.deleteIfExists(symlinkPath)
+      Files.createSymbolicLink(symlinkPath, symlinkPath.getParent.relativize( output.toPath ))
+    } catch {
+      case uoe: UnsupportedOperationException => println("Your OS sucks. Got symlinks?")
+      case unknown: Exception => println("Failed to Create symlink: " + unknown)
+    }
+
   }
 }
