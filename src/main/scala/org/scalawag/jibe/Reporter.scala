@@ -1,7 +1,7 @@
 package org.scalawag.jibe
 
 import java.io.{File, FileFilter}
-import java.nio.file.{Files, Path, Paths}
+import java.nio.file.Files
 
 import spray.json._
 import FileUtils._
@@ -9,8 +9,8 @@ import org.scalawag.jibe.backend.JsonFormat.{PersistentTarget, ShallowMandateRes
 import org.scalawag.jibe.mandate.MandateResults
 
 import scala.io.Source
-import scala.util.{Random, Try}
-import scala.xml.{Elem, NodeSeq}
+import scala.util.Try
+import scala.xml.NodeSeq
 
 object Reporter {
   private val dirFilter = new FileFilter {
@@ -99,9 +99,9 @@ object Reporter {
     val mr = Source.fromFile(dir / "mandate.js").mkString.parseJson.convertTo[ShallowMandateResults]
 
     val (outcomeClass, outcomeIcon) = mr.outcome match {
-      case MandateResults.Outcome.SUCCESS => ("row success", "fa fa-check")
-      case MandateResults.Outcome.FAILURE => ("row failure", "fa fa-exclamation")
-      case MandateResults.Outcome.USELESS => ("row skipped", "fa fa-times")
+      case MandateResults.Outcome.SUCCESS => ("success", "fa fa-check")
+      case MandateResults.Outcome.FAILURE => ("failure", "fa fa-exclamation")
+      case MandateResults.Outcome.USELESS => ("skipped", "fa fa-times")
     }
 
     val innards =
@@ -115,16 +115,18 @@ object Reporter {
 
     val iconClass = icon.map( i => s"fa $i" ).getOrElse(outcomeIcon)
 
-    <div class={outcomeClass}>
-      {spacers(depth)}
-      <div class="box collapser" shutter-control={rowId} shutter-indicator={rowId}><i class="fa fa-caret-right"></i></div>
-      <div class="box icon" shutter-control={rowId}><i class={iconClass}></i></div>
-      <!--      <div class="box outcome"><div style="height: 1em; width: 20em; background: linear-gradient(to right, green 60%, yellow 60%);"></div></div> -->
-      <div class="box time" shutter-control={rowId}>{mr.elapsedTime} ms</div>
-      <div class="box description" shutter-control={rowId}>{description.getOrElse(mr.description.getOrElse(""))}&nbsp;</div>
-    </div> ++
-    <div shutter={rowId} shuttered="true">
-      {innards}
+    <div class={s"mandate $outcomeClass"}>
+      <div class="row summary">
+        {spacers(depth)}
+        <div class="box collapser" shutter-control={rowId} shutter-indicator={rowId}><i class="fa fa-caret-right"></i></div>
+        <div class="box icon" shutter-control={rowId}><i class={iconClass}></i></div>
+<!--      <div class="box outcome"><div style="height: 1em; width: 20em; background: linear-gradient(to right, green 60%, yellow 60%);"></div></div> -->
+        <div class="box time" shutter-control={rowId}>{mr.elapsedTime} ms</div>
+        <div class="box description" shutter-control={rowId}>{description.getOrElse(mr.description.getOrElse(""))}&nbsp;</div>
+      </div>
+      <div shutter={rowId} shuttered="true">
+        {innards}
+      </div>
     </div>
   }
 
@@ -135,19 +137,21 @@ object Reporter {
       val t = Source.fromFile(d / "target.js").mkString.parseJson.convertTo[PersistentTarget]
       val exceptionFile = d / "exception"
         if ( exceptionFile.exists ) {
-          <div class="row failure">
-            <div class="box collapser" shutter-control={rowId} shutter-indicator={rowId}><i class="fa fa-caret-right"></i></div>
-            <div class="box icon" shutter-control={rowId}><i class="fa fa-dot-circle-o"></i></div>
-            <div class="box description" shutter-control={rowId}>{t.username}@{t.hostname}:{t.port} ({t.commander})</div>
-          </div> ++
-          <div shutter={rowId} shuttered="true" class="row mono">
-            <div class="box spacer">&nbsp;</div>
-            <div class="box stack-trace">
-              <pre>{ Source.fromFile(exceptionFile).mkString }</pre>
+          <div class="mandate failure">
+            <div class="row summary">
+              <div class="box collapser" shutter-control={rowId} shutter-indicator={rowId}><i class="fa fa-caret-right"></i></div>
+              <div class="box icon" shutter-control={rowId}><i class="fa fa-dot-circle-o"></i></div>
+              <div class="box description" shutter-control={rowId}>{t.username}@{t.hostname}:{t.port} ({t.commander})</div>
+            </div>
+            <div shutter={rowId} shuttered="true" class="row mono">
+              <div class="box spacer">&nbsp;</div>
+              <div class="box stack-trace">
+                <pre>{ Source.fromFile(exceptionFile).mkString }</pre>
+              </div>
             </div>
           </div>
         } else {
-          mandate(d, 0, s"${rowId}_0", Some(s"${t.username}@${t.hostname}:${t.port} (${t.commander}"), Some("fa-dot-circle-o"))
+          mandate(d, 0, s"${rowId}_0", Some(s"${t.username}@${t.hostname}:${t.port} (${t.commander})"), Some("fa-dot-circle-o"))
         }
     } toSeq
   }
@@ -160,7 +164,6 @@ object Reporter {
           <head>
             <link rel="stylesheet" href="http://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css"/>
             <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.1/jquery.min.js"></script>
-            <script type="text/javascript" src="../jquery.collapse.js"></script>
             <style>
               html {{
                 font-family: sans-serif;
@@ -170,23 +173,23 @@ object Reporter {
                 min-width: 1000px;
               }}
 
-              div.success {{
+              div.success div.summary {{
                 background-color: #DFF2BF;
               }}
 
-              div.failure {{
+              div.failure div.summary {{
                 background-color: #FFBABA;
               }}
 
-              div.running {{
+              div.running div.summary {{
                 background-color: #c3e6fc;
               }}
 
-              div.skipped {{
+              div.skipped div.summary {{
                 background-color: #FEEFB3;
               }}
 
-              div.waiting {{
+              div.waiting div.summary {{
               }}
 
               div.row {{
@@ -311,12 +314,48 @@ object Reporter {
                 animation-fill-mode: forwards;
               }}
 
+              div.actions i {{
+                cursor: pointer;
+              }}
+
+              div.actions i.toggle-on {{
+                color: black;
+              }}
+
+              div.actions i.toggle-off {{
+                color: #dddddd;
+              }}
+
+              div.mandate.hidden {{
+                display: none;
+              }}
+
+              div.summary {{
+                margin-top: 1px;
+              }}
             </style>
             <script type="text/javascript" src="../code.js"></script>
           </head>
           <body>
             <div class="row">
-<!--          <div class="box actions"><a href="#">Collapse All</a> | <a href="#">Expand All</a></div> -->
+              <div class="box actions">
+                <i class="fa fa-angle-double-down" onclick="shutterOpenAll()" title="Expand All"></i>
+              </div>
+              <div class="box actions">
+                <i class="fa fa-angle-down" onclick="shutterOpenMandates()" title="Expand Mandates"></i>
+              </div>
+              <div class="box actions">
+                <i class="fa fa-angle-double-up" onclick="shutterCloseAll()" title="Collapse All"></i>
+              </div>
+              <div class="box actions">
+                <i class="fa fa-exclamation toggle-on" outcome="failure" onclick="toggleHide(this)" title="Hide Failed"></i>
+              </div>
+              <div class="box actions">
+                <i class="fa fa-times toggle-on" outcome="skipped" onclick="toggleHide(this)" title="Hide Skipped"></i>
+              </div>
+              <div class="box actions">
+                <i class="fa fa-check toggle-on" outcome="success" onclick="toggleHide(this)" title="Hide Successful"></i>
+              </div>
               <div class="box description">{ input.getParentFile.getName }</div>
             </div>
 
