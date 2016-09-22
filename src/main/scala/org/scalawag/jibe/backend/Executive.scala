@@ -98,7 +98,7 @@ object Executive {
 
         }
 
-      writeFileWithPrintWriter(reportDir / "results.js") { pw =>
+      writeFileWithPrintWriter(reportDir / "mandate.js") { pw =>
         import spray.json._
         import JsonFormat._
         pw.write(shallowResults.toJson.prettyPrint)

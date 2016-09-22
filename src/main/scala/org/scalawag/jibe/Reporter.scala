@@ -9,7 +9,7 @@ import org.scalawag.jibe.backend.JsonFormat.{PersistentTarget, ShallowMandateRes
 import org.scalawag.jibe.mandate.MandateResults
 
 import scala.io.Source
-import scala.util.Try
+import scala.util.{Random, Try}
 import scala.xml.{Elem, NodeSeq}
 
 object Reporter {
@@ -17,127 +17,138 @@ object Reporter {
     override def accept(f: File) = f.isDirectory
   }
 
-  private def scriptTable(label: String, dir: File): NodeSeq = {
+  private def scriptTable(label: String, dir: File, depth: Int, rowId: String): NodeSeq = {
     val exitCode = Source.fromFile(dir / "exitCode").mkString.toInt
-    val script = Try(Source.fromFile(dir / "script").getLines()).getOrElse(Iterator.empty)
-    val output = Source.fromFile(dir / "output").getLines()
+    val script = Try(Some(Source.fromFile(dir / "script").mkString)).getOrElse(None)
+    val output = Try(Source.fromFile(dir / "output").getLines()).getOrElse(Iterable.empty)
+
+    val scriptId = s"${rowId}_s"
+    val outputId = s"${rowId}_o"
 
     val outputElems =
       {
         if ( output.isEmpty )
           NodeSeq.Empty
         else
-          <tr>
-            <td bgcolor="black">
+          <div class="row mono" shutter={outputId} shuttered="true">
+            {spacers(depth + 1)}
+            <div class="box transcript">
               <pre>{
                 output map { l =>
-                  val (color, text) =
+                  val (spanClass, text) =
                     if ( l.startsWith("E:") )
-                      ("red", l.substring(2))
+                      ("stderr", l.substring(2))
                     else if ( l.startsWith("O:") )
-                      ("lightgray", l.substring(2))
+                      ("stdout", l.substring(2))
                     else
-                      ("lightgray", l)
+                      ("stdout", l)
 
-                  <div><font color={color}>{text}</font></div>
+                  <div class={spanClass}>{text}</div>
                 }
               }</pre>
-            </td>
-          </tr>
+            </div>
+          </div>
       }
 
     val scriptElems =
     {
-      if ( script.isEmpty )
+      if ( script.isEmpty || script.get.isEmpty )
         NodeSeq.Empty
       else
-        <tr>
-          <td>
-            <pre>{
-  script map { l => <div>{l}</div> }
-}</pre>
-          </td>
-        </tr>
+        <div class="row mono"  shutter={scriptId} shuttered="true">
+          {spacers(depth + 1)}
+          <div class="box script">
+            <pre>{script.get}</pre>
+          </div>
+        </div>
     }
 
-    Seq(
-      <tr>
-        <td colspan="2" bgcolor="lightgray">{label} => {exitCode}</td>
-      </tr>,
-      scriptElems,
-      outputElems).flatten
+    val outputStyle = "visibility: " + ( if ( outputElems.isEmpty ) "hidden" else "inherit" )
+    val scriptStyle = "visibility: " + ( if ( scriptElems.isEmpty ) "hidden" else "inherit" )
 
+    <div class="row phase-name">
+      {spacers(depth)}
+      <div class="box actions" shutter-control={outputId} style={outputStyle}>Output</div>
+      <div class="box right collapser" shutter-control={outputId} style={outputStyle} shutter-indicator={outputId}><i class="fa fa-caret-right"></i></div>
+      <div class="box right" shutter-control={scriptId} style={scriptStyle}>Script</div>
+      <div class="box right collapser" shutter-control={scriptId} style={scriptStyle} shutter-indicator={scriptId}><i class="fa fa-caret-right"></i></div>
+      <div class="box description">{label} => {exitCode}</div>
+    </div> ++ scriptElems ++ outputElems
   }
 
-  private def commandTable(dir: File): NodeSeq = {
-    val possibleDirsInOrder = List("test", "test/length_check", "test/content_check", "perform")
+  private def spacers(n: Int): NodeSeq = Seq.fill(n)(<div class="box spacer">&nbsp;</div>)
 
-    possibleDirsInOrder.flatMap { n =>
-      val d = dir / n
+  private def commandTable(dir: File, depth: Int, rowId: String): NodeSeq = {
+    val possibleDirsInOrder = List(
+      "test" -> "Check",
+      "test/length_check" -> "Length Check",
+      "test/content_check" -> "Content Check",
+      "perform" -> "Execute"
+    )
+
+    possibleDirsInOrder.zipWithIndex flatMap { case ((dirName, label), n) =>
+      val d = dir / dirName
       // exitCode will always be present in a directory that represents script output.  Use that as an indicator.
       if ( ( d / "exitCode" ).exists )
-        scriptTable(n, d)
+        scriptTable(label, d, depth, s"${rowId}_${n}")
       else NodeSeq.Empty
     }
   }
 
-  def mandate(dir: File): NodeSeq = {
-    val mr = Source.fromFile(dir / "results.js").mkString.parseJson.convertTo[ShallowMandateResults]
+  def mandate(dir: File, depth: Int, rowId: String, description: Option[String] = None, icon: Option[String] = None): NodeSeq = {
+    val mr = Source.fromFile(dir / "mandate.js").mkString.parseJson.convertTo[ShallowMandateResults]
 
-    val outcomeColor = mr.outcome match {
-      case MandateResults.Outcome.SUCCESS => "green"
-      case MandateResults.Outcome.FAILURE => "red"
-      case MandateResults.Outcome.USELESS => "yellow"
-//      case MandateResults.Outcome.SUCCESS => ("#4F8A10","#DFF2BF")
-//      case MandateResults.Outcome.FAILURE => ("#D8000C","#FFBABA")
-//      case MandateResults.Outcome.USELESS => ("#9F6000","#FEEFB3")
+    val (outcomeClass, outcomeIcon) = mr.outcome match {
+      case MandateResults.Outcome.SUCCESS => ("row success", "fa fa-check")
+      case MandateResults.Outcome.FAILURE => ("row failure", "fa fa-exclamation")
+      case MandateResults.Outcome.USELESS => ("row skipped", "fa fa-times")
     }
 
-    val header =
-      <tr bgcolor={outcomeColor}>
-        <td>+<!-- &#x2795; &#x2796; --></td>
-        <td>{mr.description.getOrElse("")}</td>
-        <td>{mr.elapsedTime} ms</td>
-        <td>{mr.outcome}</td>
-      </tr>
-
     val innards =
-      <td colspan="4">
-        <table border="1" style="margin-left: 2em">
-          {
-          if ( mr.composite ) {
-            dir.listFiles(dirFilter).flatMap(mandate).toSeq
-          } else {
-            commandTable(dir)
-          }
-          }
-        </table>
-      </td>
+      if ( mr.composite ) {
+        dir.listFiles(dirFilter).zipWithIndex.flatMap { case (m, n) =>
+          mandate(m, depth + 1, s"${rowId}_${n}")
+        }.toSeq
+      } else {
+        commandTable(dir, depth + 1, rowId)
+      }
 
-    Seq(header,innards)
+    val iconClass = icon.map( i => s"fa $i" ).getOrElse(outcomeIcon)
+
+    <div class={outcomeClass}>
+      {spacers(depth)}
+      <div class="box collapser" shutter-control={rowId} shutter-indicator={rowId}><i class="fa fa-caret-right"></i></div>
+      <div class="box icon" shutter-control={rowId}><i class={iconClass}></i></div>
+      <!--      <div class="box outcome"><div style="height: 1em; width: 20em; background: linear-gradient(to right, green 60%, yellow 60%);"></div></div> -->
+      <div class="box time" shutter-control={rowId}>{mr.elapsedTime} ms</div>
+      <div class="box description" shutter-control={rowId}>{description.getOrElse(mr.description.getOrElse(""))}&nbsp;</div>
+    </div> ++
+    <div shutter={rowId} shuttered="true">
+      {innards}
+    </div>
   }
 
   def targets(dir: File): NodeSeq = {
-    dir.listFiles(dirFilter) flatMap { d =>
+    dir.listFiles(dirFilter).zipWithIndex flatMap { case (d, n)  =>
+      val rowId = s"r$n"
+
       val t = Source.fromFile(d / "target.js").mkString.parseJson.convertTo[PersistentTarget]
       val exceptionFile = d / "exception"
-      val innards: Elem =
         if ( exceptionFile.exists ) {
-          <pre>{ Source.fromFile(exceptionFile).mkString }</pre>
+          <div class="row failure">
+            <div class="box collapser" shutter-control={rowId} shutter-indicator={rowId}><i class="fa fa-caret-right"></i></div>
+            <div class="box icon" shutter-control={rowId}><i class="fa fa-dot-circle-o"></i></div>
+            <div class="box description" shutter-control={rowId}>{t.username}@{t.hostname}:{t.port} ({t.commander})</div>
+          </div> ++
+          <div shutter={rowId} shuttered="true" class="row mono">
+            <div class="box spacer">&nbsp;</div>
+            <div class="box stack-trace">
+              <pre>{ Source.fromFile(exceptionFile).mkString }</pre>
+            </div>
+          </div>
         } else {
-          <table border="1" style="margin-left: 2em">
-            { mandate(d) }
-          </table>
+          mandate(d, 0, s"${rowId}_0", Some(s"${t.username}@${t.hostname}:${t.port} (${t.commander}"), Some("fa-dot-circle-o"))
         }
-
-      <tr>
-        <td>{t.username}@{t.hostname}:{t.port} ({t.commander})</td>
-      </tr>
-      <tr>
-        <td>
-          {innards}
-        </td>
-      </tr>
     } toSeq
   }
 
@@ -146,10 +157,170 @@ object Reporter {
     FileUtils.writeFileWithPrintWriter(output) { pw =>
       pw.println(
         <html>
+          <head>
+            <link rel="stylesheet" href="http://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css"/>
+            <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.1/jquery.min.js"></script>
+            <script type="text/javascript" src="../jquery.collapse.js"></script>
+            <style>
+              html {{
+                font-family: sans-serif;
+              }}
+
+              body {{
+                min-width: 1000px;
+              }}
+
+              div.success {{
+                background-color: #DFF2BF;
+              }}
+
+              div.failure {{
+                background-color: #FFBABA;
+              }}
+
+              div.running {{
+                background-color: #c3e6fc;
+              }}
+
+              div.skipped {{
+                background-color: #FEEFB3;
+              }}
+
+              div.waiting {{
+              }}
+
+              div.row {{
+                width: 100%;
+                clear: both;
+              }}
+
+              div.box {{
+                //border: solid black 1pt;
+              padding-top: .5em;
+              padding-bottom: .5em;
+              }}
+
+              div.collapser {{
+                width: 1.5em;
+                float: left;
+                text-align: center;
+              }}
+
+              div.phase-name {{
+                color: white;
+                background-color: gray;
+              }}
+
+              div.icon {{
+                width: 1.5em;
+                float: left;
+                text-align: center;
+              }}
+
+              div.spacer {{
+                width: 1.5em;
+                float: left;
+                background-color: white;
+              }}
+
+              div.time {{
+                float: right;
+                text-align: right;
+                padding-right: 1em;
+              }}
+
+              div.outcome {{
+                float: right;
+                width: 20em;
+                padding-left: .5em;
+                padding-right: .5em;
+              }}
+
+              div.description {{
+                padding-left: .5em;
+                overflow: auto;
+              }}
+
+              div.actions {{
+                float: right;
+                padding-right: 1em;
+              }}
+
+              div.right {{
+                float: right;
+              }}
+
+              pre {{
+                margin: 0;
+                padding: .5em;
+                line-height: 1.3em;
+                border: 1px solid #cccccc;
+                border-radius: .5em;
+                overflow: auto;
+              }}
+
+              div.transcript pre {{
+                background-color: black;
+              }}
+
+              div.script {{
+//                padding-bottom: 0;
+              }}
+
+              div.script pre {{
+                background-color: #eeeeee;
+              }}
+
+              div.stack-trace pre {{
+                background-color: #ffdddd;
+              }}
+
+              div.mono {{
+                padding-top: 0;
+              }}
+
+              div.stdout {{
+                color: lightgray;
+              }}
+
+              div.stderr {{
+                color: #ee6666;
+              }}
+
+              a i {{
+                text-decoration: none !important;
+                color: inherit;
+              }}
+
+              @keyframes spinup {{
+                from {{ transform: rotate(90deg); }}
+                to {{ transform: rotate(0deg); }}
+              }}
+
+              @keyframes spindown {{
+                from {{ transform: rotate(0deg); }}
+                to {{ transform: rotate(90deg); }}
+              }}
+
+              div.spinup {{
+                animation: spinup 200ms;
+              }}
+
+              div.spindown {{
+                animation: spindown 200ms;
+                animation-fill-mode: forwards;
+              }}
+
+            </style>
+            <script type="text/javascript" src="../code.js"></script>
+          </head>
           <body>
-            <table border="1">
-              { targets(input) }
-            </table>
+            <div class="row">
+<!--          <div class="box actions"><a href="#">Collapse All</a> | <a href="#">Expand All</a></div> -->
+              <div class="box description">{ input.getParentFile.getName }</div>
+            </div>
+
+            { targets(input) }
           </body>
         </html>
       )
