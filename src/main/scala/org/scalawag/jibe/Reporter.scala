@@ -68,11 +68,10 @@ object Reporter {
 
     <div class="row phase-name">
       {spacers(depth)}
-      <div class="box actions" shutter-control={outputId} style={outputStyle}>Output</div>
-      <div class="box right collapser" shutter-control={outputId} style={outputStyle} shutter-indicator={outputId}><i class="fa fa-caret-right"></i></div>
-      <div class="box right" shutter-control={scriptId} style={scriptStyle}>Script</div>
+      <div class="box actions" shutter-control={scriptId} style={scriptStyle}>Script</div>
       <div class="box right collapser" shutter-control={scriptId} style={scriptStyle} shutter-indicator={scriptId}><i class="fa fa-caret-right"></i></div>
-      <div class="box description">{label} => {exitCode}</div>
+      <div class="box collapser" shutter-control={outputId} style={outputStyle} shutter-indicator={outputId}><i class="fa fa-caret-right"></i></div>
+      <div class="box description" shutter-control={outputId}>{label} => {exitCode}</div>
     </div> ++ scriptElems ++ outputElems
   }
 
