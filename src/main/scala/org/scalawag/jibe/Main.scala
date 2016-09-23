@@ -14,33 +14,31 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-    val targets = Iterable(
+    val commanders = Iterable(
       "192.168.212.11",
       "192.168.212.12"
     ) map { ip =>
-      Target(ip, "vagrant", "vagrant", 22, UbuntuCommander, sudo = true)
+      new UbuntuCommander(SshInfo(ip, "vagrant", "vagrant", 22),sudo = true)
     }
 
     def CreateEveryoneUser(name: String) =
-      CompositeMandate(s"create personal user: $name",
+      new CheckableCompositeMandate(Some(s"create personal user: $name"), Seq(
         CreateOrUpdateUser(name),
         CreateOrUpdateGroup("everyone"),
         AddUserToGroups(name, "everyone")
-      )
+      ))
 
     def AddUsersToGroup(group: String, users: String*) =
-      CompositeMandate(s"add multiple users to group $group",
-        users.map(AddUserToGroups(_, group)):_*
-      )
+      new CheckableCompositeMandate(Some(s"add multiple users to group $group"), users.map(AddUserToGroups(_, group)))
 
-    val mandate = CompositeMandate(
+    val mandate = new CheckableCompositeMandate(None, Seq(
       CreateEveryoneUser("ernie"),
       CreateEveryoneUser("bert"),
       AddUsersToGroup("bedroom", "ernie", "bert"),
       CreateOrUpdateGroup(Group("bedroom", gid = Some(1064))),
       CreateOrUpdateUser(User("oscar", primaryGroup = Some("grouch"), home = Some("/tmp"), uid = Some(5005))),
       SendLocalFile(new File("build.sbt"), new File("/tmp/blah"))
-    )
+    ))
 
     def dumpMandate(pw: PrintWriter, mandate: Mandate, depth: Int = 0): Unit = {
       val prefix = "  " * depth
@@ -67,7 +65,7 @@ object Main {
 
       val date = ISO8601TimestampFormatter(TimeZone.getTimeZone("UTC")).format(System.currentTimeMillis)
       val resultsDir = new File("results") / date
-      val results = Executive.execute(targets.map(_ -> orderedMandate).toMap, resultsDir / "raw")
+      val results = Executive.takeActionIfNeeded(resultsDir / "raw", commanders.map(_ -> orderedMandate).toMap)
 
       Reporter.generate(resultsDir / "raw", resultsDir / "html" / "index.html", resultsDir.getParentFile / "latest.html")
     } catch {

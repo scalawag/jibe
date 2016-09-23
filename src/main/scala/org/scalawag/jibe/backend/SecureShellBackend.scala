@@ -1,78 +1,71 @@
 package org.scalawag.jibe.backend
 
 import java.io._
-
 import org.scalawag.jibe.FileUtils._
-
 import scala.io.Source
 
-trait Command {
-  def test(target: Target, dir: File): Int
-  def perform(target: Target, dir: File): Int
+class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false) {
 
   // Command can include bash scripting with ';' and '&&' and can use environment variables
 
-  def ssh(target: Target, command: String, reportDir: File): Int =
-    exec(
-      target,
-      if ( target.sudo )
+  def exec(resultsDir: File, command: String): Int =
+    execInternal(
+      resultsDir,
+      if ( sudo )
         s"""sudo /bin/bash <<'EOS'
            |$command
            |EOS""".stripMargin
       else
         command,
-     null,
-     reportDir
+      null
     )
 
-  def sshResource(target: Target, script: String, context: Map[String, Any], reportDir: File): Int = {
-    val scriptResource = Option(this.getClass.getResourceAsStream(script)) getOrElse {
-      throw new RuntimeException(s"unable to load script resource from classpath: $script")
+  def execResource(resultsDir: File, scriptPath: String, context: Map[String, Any]): Int = {
+    val scriptResource = Option(this.getClass.getResourceAsStream(scriptPath)) getOrElse {
+      throw new RuntimeException(s"unable to load script resource from classpath: $scriptPath")
     }
     val scriptLines = Source.fromInputStream(scriptResource).getLines
 
     val contextLines = context map { case (k,v) => s"""$k="$v"""" }
 
     val fullScript =
-      if ( target.sudo )
+      if ( sudo )
         Iterable("sudo /bin/bash <<'EOS'") ++ contextLines ++ scriptLines ++ Iterable("EOS")
       else
         contextLines ++ scriptLines
 
-    exec(
-      target,
+    execInternal(
+      resultsDir,
       fullScript.mkString(endl),
-      null,
-      reportDir
+      null
     )
   }
 
-  def scp(target: Target, source: File, destination: File, reportDir: File, mode: String = "0644"): Int = {
+  def scp(resultsDir: File, source: File, destination: File, mode: String = "0644"): Int = {
     import scala.collection.JavaConversions._
-    exec(
-      target,
-      s"${ if ( target.sudo ) "/usr/bin/sudo " else "" }/usr/bin/scp -t $destination",
+    execInternal(
+      resultsDir,
+      s"${ if ( sudo ) "/usr/bin/sudo " else "" }/usr/bin/scp -t $destination",
       new SequenceInputStream(Iterator(
         new ByteArrayInputStream(s"C$mode ${source.length} ${source.getName}\n".getBytes),
         new FileInputStream(source),
         new ByteArrayInputStream(Array(0.toByte))
-      )),
-      reportDir
+      ))
     )
   }
 
-  private[this] def exec(target: Target, command: String, stdin: InputStream, reportDir: File): Int =
-    Sessions.withChannel(target) { c =>
+  private[this] def execInternal(resultsDir: File, command: String, stdin: InputStream): Int =
+    Sessions.withChannel(ssh) { c =>
       c.setInputStream(stdin)
 
-      writeFileWithOutputStream(reportDir / "output") { out =>
+      writeFileWithOutputStream(resultsDir / "output") { out =>
         val demux = new DemuxOutputStream(out)
 
         // JSch will close these for us.
         c.setOutputStream(demux.createChannel("O:"))
         c.setErrStream(demux.createChannel("E:"))
 
-        writeFileWithPrintWriter(reportDir / "script") { w =>
+        writeFileWithPrintWriter(resultsDir / "script") { w =>
           w.print(command)
         }
 
@@ -85,7 +78,7 @@ trait Command {
 
         c.disconnect()
 
-        writeFileWithPrintWriter(reportDir / "exitCode") { ec =>
+        writeFileWithPrintWriter(resultsDir / "exitCode") { ec =>
           ec.print(c.getExitStatus)
         }
       }

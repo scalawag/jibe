@@ -3,7 +3,7 @@ package org.scalawag.jibe.backend
 import java.io.PrintWriter
 
 import org.scalawag.jibe.AbortException
-import org.scalawag.jibe.mandate.{CompositeMandate, Mandate}
+import org.scalawag.jibe.mandate.{CheckableCompositeMandate, CheckableMandate, CompositeMandate, Mandate}
 
 import scalax.collection.Graph
 import scalax.collection.edge.LDiEdge
@@ -11,10 +11,10 @@ import org.scalawag.jibe.Logging._
 
 object Orderer {
 
-  def order(mandate: Mandate): Mandate = {
+  def order(mandate: CheckableMandate): CheckableMandate = {
     log.debug(s"ordering mandate: $mandate")
     mandate match {
-      case CompositeMandate(desc, innards, fixedOrder) =>
+      case CheckableCompositeMandate(desc, innards, fixedOrder) =>
 
         var graph = Graph[Mandate, LDiEdge]()
 
@@ -88,7 +88,7 @@ object Orderer {
               path.toOuterNodes.asInstanceOf[Traversable[Mandate]].foreach { e => pw.println(s"  $e") }
             }
 
-            CompositeMandate(desc, path.toOuterNodes.toSeq.map(_.asInstanceOf[Mandate]).map(order))
+            new CheckableCompositeMandate(desc, path.toOuterNodes.toSeq.map(_.asInstanceOf[CheckableMandate]).map(order))
           case Left(cycle) =>
             innards foreach { m =>
               println(s"MANDATE: ${m.description}")

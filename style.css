@@ -1,0 +1,163 @@
+html {
+  font-family: sans-serif;
+}
+
+body {
+  min-width: 1000px;
+}
+
+div.mandate.success > div.summary {
+  background-color: #DFF2BF;
+}
+
+div.mandate.failure > div.summary {
+  background-color: #FFBABA;
+}
+
+div.mandate.running > div.summary {
+  background-color: #c3e6fc;
+}
+
+div.mandate.skipped > div.summary {
+  background-color: #FEEFB3;
+}
+
+div.mandate.waiting > div.summary {
+}
+
+div.row {
+  width: 100%;
+  clear: both;
+}
+
+div.box {
+//  border: solid black 1pt;
+  padding-top: .5em;
+  padding-bottom: .5em;
+}
+
+div.collapser {
+  width: 1.5em;
+  float: left;
+  text-align: center;
+}
+
+div.phase-name {
+  color: white;
+  background-color: gray;
+}
+
+div.icon {
+  width: 1.5em;
+  float: left;
+  text-align: center;
+}
+
+div.spacer {
+  width: 1.5em;
+  float: left;
+  background-color: white;
+}
+
+div.time {
+  float: right;
+  text-align: right;
+  padding-right: 1em;
+}
+
+div.outcome {
+  float: right;
+  width: 20em;
+  padding-left: .5em;
+  padding-right: .5em;
+}
+
+div.description {
+  padding-left: .5em;
+  overflow: auto;
+}
+
+div.actions {
+  float: right;
+  padding-right: 1em;
+}
+
+div.right {
+  float: right;
+}
+
+pre {
+  margin: 0;
+  padding: .5em;
+  line-height: 1.3em;
+  border: 1px solid #cccccc;
+  border-radius: .5em;
+  overflow: auto;
+}
+
+div.transcript pre {
+  background-color: black;
+}
+
+div.script {
+//  padding-bottom: 0;
+}
+
+div.script pre {
+  background-color: #eeeeee;
+}
+
+div.stack-trace pre {
+  background-color: #ffdddd;
+}
+
+div.mono {
+  padding-top: 0;
+}
+
+div.stdout {
+  color: lightgray;
+}
+
+div.stderr {
+  color: #ee6666;
+}
+
+@keyframes spinup {
+  from { transform: rotate(90deg); }
+  to { transform: rotate(0deg); }
+}
+
+@keyframes spindown {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(90deg); }
+}
+
+div.spinup {
+  animation: spinup 200ms;
+}
+
+div.spindown {
+  animation: spindown 200ms;
+  animation-fill-mode: forwards;
+}
+
+div.actions i {
+  cursor: pointer;
+}
+
+div.actions i.toggle-on {
+  color: black;
+}
+
+div.actions i.toggle-off {
+  color: #dddddd;
+}
+
+div.mandate.hidden {
+  display: none;
+}
+
+div.summary {
+  margin-top: 1px;
+}

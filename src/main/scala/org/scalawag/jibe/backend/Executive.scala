@@ -1,112 +1,70 @@
 package org.scalawag.jibe.backend
 
 import java.io.File
-
 import org.scalawag.jibe.FileUtils._
-import org.scalawag.jibe.backend.JsonFormat.ShallowMandateResults
-import org.scalawag.jibe.mandate.{CompositeMandate, Mandate, MandateResults}
-
+import org.scalawag.jibe.mandate.MandateResults.Outcome
+import org.scalawag.jibe.mandate._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
+import scala.util.{Failure, Success, Try}
 
 object Executive {
-  def execute(targets: Map[Target, Mandate], reportDir: File) = {
-    val futures = targets map { case (t, m) =>
-      Future {
-        val dir = reportDir / s"${t.username}@${t.hostname}:${t.port}"
-        try {
-          this.apply(m, t, dir)
-        } catch {
-          case ex: Exception =>
-            writeFileWithPrintWriter(dir / "exception")(ex.printStackTrace)
-        }
-        writeFileWithPrintWriter(dir / "target.js") { pw =>
-          import spray.json._
-          import JsonFormat._
-          pw.write(PersistentTarget(t).toJson.prettyPrint)
-        }
-      }
+
+  def takeAction(resultsDir: File, targets: Map[Commander, Mandate]): Unit =
+    execute(resultsDir, targets)(_.takeAction(_, _))
+
+  def isActionCompleted(resultsDir: File, targets: Map[Commander, CheckableMandate]): Unit =
+    execute(resultsDir, targets)(_.isActionCompleted(_, _))
+
+  def takeActionIfNeeded(resultsDir: File, targets: Map[Commander, CheckableMandate]): Unit =
+    execute(resultsDir, targets)(_.takeActionIfNeeded(_, _))
+
+  private[this] def execute[A <: Mandate, B](resultsDir: File, targets: Map[Commander, A])(fn: (A, Commander, File) => B): Unit = {
+    val futures = targets map { case (commander, mandate) =>
+      Future(executeMandate(fn)(resultsDir / commander.toString, commander, mandate))
     }
 
-    Await.ready(Future.sequence(futures), Duration.Inf)
+    Await.ready(Future.sequence(futures), Duration.Inf) // TODO: eventually go all asynchronous?
   }
 
-  def apply(rootMandate: Mandate, target: Target, reportDir: File) = {
+  def TAKE_ACTION = { (a: Mandate, c: Commander, dir: File) => a.takeAction(c, dir) }
+  def IS_ACTION_COMPLETED = { (a: CheckableMandate, c: Commander, dir: File) => a.isActionCompleted(c, dir) }
+  def TAKE_ACTION_IF_NEEDED = { (a: CheckableMandate, c: Commander, dir: File) => a.takeActionIfNeeded(c, dir) }
 
-    def execute(mandate: Mandate, reportDir: File): MandateResults = {
-      val (results, shallowResults) =
-        mandate match {
+  def executeMandate[A <: Mandate, B](fn: (A, Commander, File) => B)(resultsDir: File, commander: Commander, mandate: A): B = {
 
-          case CompositeMandate(desc, innards, _) =>
-            val width = math.log10(innards.length).toInt + 1
+    val startTime = System.currentTimeMillis
+    // Execute the mandate and catch any exceptions
+    val rv = Try(fn(mandate, commander, resultsDir))
+    val endTime = System.currentTimeMillis
 
-            val startTime = System.currentTimeMillis
-
-            val results = innards.zipWithIndex map { case (m, n) =>
-              val subdir = s"%0${width}d".format(n + 1) + m.description.map(s => "_" + s.replaceAll("\\W+", "_")).getOrElse("")
-
-              val childDir = mkdir(reportDir / subdir)
-              execute(m, childDir)
-            }
-
-            val endTime = System.currentTimeMillis
-
-            val outcome =
-              if (results.exists(_.outcome == MandateResults.Outcome.FAILURE))
-                MandateResults.Outcome.FAILURE
-              else if (results.forall(_.outcome == MandateResults.Outcome.USELESS))
-                MandateResults.Outcome.USELESS
-              else
-                MandateResults.Outcome.SUCCESS
-
-            (
-              MandateResults(mandate, outcome, startTime, endTime, results),
-              ShallowMandateResults(mandate.description, true, outcome, startTime, endTime)
-            )
-
-          case m =>
-
-            val command = target.commander.getCommand(m)
-
-            val startTime = System.currentTimeMillis
-
-            val testExitCode = command.test(target, reportDir / "test")
-            if (testExitCode == 0) {
-              val endTime = System.currentTimeMillis
-
-              (
-                MandateResults(mandate, MandateResults.Outcome.USELESS, startTime, endTime),
-                ShallowMandateResults(mandate.description, false, MandateResults.Outcome.USELESS, startTime, endTime)
-              )
-            } else {
-              val performExitCode = command.perform(target, reportDir / "perform")
-
-              val outcome =
-                if (performExitCode == 0)
-                  MandateResults.Outcome.SUCCESS
-                else
-                  MandateResults.Outcome.FAILURE
-
-              val endTime = System.currentTimeMillis
-
-              (
-                MandateResults(mandate, outcome, startTime, endTime),
-                ShallowMandateResults(mandate.description, false, outcome, startTime, endTime)
-              )
-            }
-
-        }
-
-      writeFileWithPrintWriter(reportDir / "mandate.js") { pw =>
-        import spray.json._
-        import JsonFormat._
-        pw.write(shallowResults.toJson.prettyPrint)
-      }
-
-      results
+    val outcome = rv match {
+      case Success(false) => Outcome.USELESS // From isActionCompleted or takeActionIfNeeded
+      case Success(true)  => Outcome.SUCCESS // Ditto
+      case Success(_)     => Outcome.SUCCESS // TODO: more graceful way to handle return of takeAction (non-checkable)
+      case Failure(ex)    => Outcome.FAILURE
     }
 
-    execute(rootMandate, reportDir)
+    // Write the stack trace (if there is one) to a file in the results directory
+
+    rv recover { case ex =>
+      writeFileWithPrintWriter(resultsDir / "stack-trace") { pw =>
+        ex.printStackTrace(pw)
+      }
+    }
+
+    // Write the summary of the mandate execution to a file in the results directory
+
+    writeFileWithPrintWriter(resultsDir / "mandate.js") { pw =>
+      import spray.json._
+      import JsonFormat._
+      val results = MandateResults(mandate.description, outcome, mandate.isInstanceOf[CompositeMandateBase[_]], startTime, endTime)
+      pw.write(results.toJson.prettyPrint)
+    }
+
+    // Either return the mandate execution return or rethrow the exception
+
+    rv.get
   }
 }

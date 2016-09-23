@@ -1,6 +1,8 @@
 package org.scalawag.jibe.mandate
 
-import org.scalawag.jibe.backend.{FileResource, GroupResource, UserResource}
+import java.io.File
+import org.scalawag.jibe.FileUtils._
+import org.scalawag.jibe.backend.{Commander, FileResource, GroupResource, UserResource}
 
 case class User(name: String,
                 primaryGroup: Option[String] = None,
@@ -14,7 +16,7 @@ object User {
   implicit def fromString(name: String) = User(name)
 }
 
-case class CreateOrUpdateUser(user: User) extends Mandate {
+case class CreateOrUpdateUser(user: User) extends CheckableMandate {
   override val description = Some(s"update user: ${user.name}")
 
   override def prerequisites = Iterable(
@@ -24,8 +26,20 @@ case class CreateOrUpdateUser(user: User) extends Mandate {
   ).flatten
 
   override def consequences = Iterable(UserResource(user.name))
+
+  override def isActionCompleted(commander: Commander, resultsDir: File): Boolean =
+    commander.execute(resultsDir / "isActionCompleted", command.DoesUserExist(user))
+
+  override def takeAction(commander: Commander, resultsDir: File): Unit =
+    commander.execute(resultsDir / "takeAction", command.CreateOrUpdateUser(user))
 }
 
-case class DeleteUser(name: String) extends Mandate {
-  override val description = Some(s"delete user: ${name}")
+case class DeleteUser(userName: String) extends CheckableMandate {
+  override val description = Some(s"delete user: ${userName}")
+
+  override def isActionCompleted(commander: Commander, resultsDir: File): Boolean =
+    ! commander.execute(resultsDir / "isActionCompleted", command.DoesUserExist(User(userName)))
+
+  override def takeAction(commander: Commander, resultsDir: File): Unit =
+    commander.execute(resultsDir  / "takeAction", command.DeleteUser(userName))
 }

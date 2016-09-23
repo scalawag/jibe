@@ -1,6 +1,9 @@
 package org.scalawag.jibe.mandate
 
-import org.scalawag.jibe.backend.Resource
+import java.io.File
+import org.scalawag.jibe.backend.{Commander, Resource}
+
+import scala.util.{Success, Try}
 
 /** A Mandate is an operation that can be executed against a system.  It may be realized as a series of system-specific
   * commands or it can be an aggregation of several other Mandates.
@@ -15,7 +18,27 @@ trait Mandate {
   def prerequisites: Iterable[Resource] = Iterable.empty
   def consequences: Iterable[Resource] = Iterable.empty
 
+  // Unit -> action was successfully taken
+  // throw -> error
+  def takeAction(commander: Commander, resultsDir: File): Unit
+
   override def toString = description.getOrElse(super.toString)
+}
+
+trait CheckableMandate extends Mandate {
+  // true -> action is not needed
+  // false -> action is needed
+  def isActionCompleted(commander: Commander, resultsDir: File): Boolean
+
+  // false -> action was unneeded
+  // true -> action was needed and completed
+  def takeActionIfNeeded(commander: Commander, resultsDir: File): Boolean =
+    if ( isActionCompleted(commander, resultsDir) ) {
+      false
+    } else {
+      takeAction(commander, resultsDir)
+      true
+    }
 }
 
 object Mandate {

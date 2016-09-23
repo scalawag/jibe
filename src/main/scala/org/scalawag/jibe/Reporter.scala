@@ -5,9 +5,8 @@ import java.nio.file.Files
 
 import spray.json._
 import FileUtils._
-import org.scalawag.jibe.backend.JsonFormat.{PersistentTarget, ShallowMandateResults}
 import org.scalawag.jibe.mandate.MandateResults
-
+import org.scalawag.jibe.backend.JsonFormat._
 import scala.io.Source
 import scala.util.Try
 import scala.xml.NodeSeq
@@ -79,10 +78,10 @@ object Reporter {
 
   private def commandTable(dir: File, depth: Int, rowId: String): NodeSeq = {
     val possibleDirsInOrder = List(
-      "test" -> "Check",
-      "test/length_check" -> "Length Check",
-      "test/content_check" -> "Content Check",
-      "perform" -> "Execute"
+      "isActionCompleted" -> "Already done?",
+      "test/isRemoteFileRightLength" -> "Length Check",
+      "test/isRemoteFileRightChecksum" -> "Content Check",
+      "takeAction" -> "Take Action"
     )
 
     possibleDirsInOrder.zipWithIndex flatMap { case ((dirName, label), n) =>
@@ -95,7 +94,7 @@ object Reporter {
   }
 
   def mandate(dir: File, depth: Int, rowId: String, description: Option[String] = None, icon: Option[String] = None): NodeSeq = {
-    val mr = Source.fromFile(dir / "mandate.js").mkString.parseJson.convertTo[ShallowMandateResults]
+    val mr = Source.fromFile(dir / "mandate.js").mkString.parseJson.convertTo[MandateResults]
 
     val (outcomeClass, outcomeIcon) = mr.outcome match {
       case MandateResults.Outcome.SUCCESS => ("success", "fa fa-check")
@@ -103,8 +102,17 @@ object Reporter {
       case MandateResults.Outcome.USELESS => ("skipped", "fa fa-times")
     }
 
+    val exceptionFile = dir / "stack-trace"
+
     val innards =
-      if ( mr.composite ) {
+      if ( exceptionFile.exists ) {
+        <div shutter={rowId} shuttered="true" class="row mono">
+          {spacers(depth)}
+          <div class="box stack-trace">
+            <pre>{ Source.fromFile(exceptionFile).mkString }</pre>
+          </div>
+        </div>
+      } else if ( mr.composite ) {
         dir.listFiles(dirFilter).zipWithIndex.flatMap { case (m, n) =>
           mandate(m, depth + 1, s"${rowId}_${n}")
         }.toSeq
@@ -120,7 +128,7 @@ object Reporter {
         <div class="box collapser" shutter-control={rowId} shutter-indicator={rowId}><i class="fa fa-caret-right"></i></div>
         <div class="box icon" shutter-control={rowId}><i class={iconClass}></i></div>
 <!--      <div class="box outcome"><div style="height: 1em; width: 20em; background: linear-gradient(to right, green 60%, yellow 60%);"></div></div> -->
-        <div class="box time" shutter-control={rowId}>{mr.elapsedTime} ms</div>
+        <div class="box time" shutter-control={rowId}>{mr.endTime - mr.startTime} ms</div>
         <div class="box description" shutter-control={rowId}>{description.getOrElse(mr.description.getOrElse(""))}&nbsp;</div>
       </div>
       <div shutter={rowId} shuttered="true">
@@ -129,31 +137,10 @@ object Reporter {
     </div>
   }
 
-  def targets(dir: File): NodeSeq = {
+  def targets(dir: File): NodeSeq =
     dir.listFiles(dirFilter).zipWithIndex flatMap { case (d, n)  =>
-      val rowId = s"r$n"
-
-      val t = Source.fromFile(d / "target.js").mkString.parseJson.convertTo[PersistentTarget]
-      val exceptionFile = d / "exception"
-        if ( exceptionFile.exists ) {
-          <div class="mandate failure">
-            <div class="row summary">
-              <div class="box collapser" shutter-control={rowId} shutter-indicator={rowId}><i class="fa fa-caret-right"></i></div>
-              <div class="box icon" shutter-control={rowId}><i class="fa fa-dot-circle-o"></i></div>
-              <div class="box description" shutter-control={rowId}>{t.username}@{t.hostname}:{t.port} ({t.commander})</div>
-            </div>
-            <div shutter={rowId} shuttered="true" class="row mono">
-              <div class="box spacer">&nbsp;</div>
-              <div class="box stack-trace">
-                <pre>{ Source.fromFile(exceptionFile).mkString }</pre>
-              </div>
-            </div>
-          </div>
-        } else {
-          mandate(d, 0, s"${rowId}_0", Some(s"${t.username}@${t.hostname}:${t.port} (${t.commander})"), Some("fa-dot-circle-o"))
-        }
+      mandate(d, 0, s"r${n}_0", Some(d.getName), Some("fa-dot-circle-o"))
     } toSeq
-  }
 
   def generate(input: File, output: File, symlink: File ): Unit = {
 
@@ -162,177 +149,8 @@ object Reporter {
         <html>
           <head>
             <link rel="stylesheet" href="http://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css"/>
+            <link rel="stylesheet" type="text/css" href="../style.css"/>
             <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.1/jquery.min.js"></script>
-            <style>
-              html {{
-                font-family: sans-serif;
-              }}
-
-              body {{
-                min-width: 1000px;
-              }}
-
-              div.success div.summary {{
-                background-color: #DFF2BF;
-              }}
-
-              div.failure div.summary {{
-                background-color: #FFBABA;
-              }}
-
-              div.running div.summary {{
-                background-color: #c3e6fc;
-              }}
-
-              div.skipped div.summary {{
-                background-color: #FEEFB3;
-              }}
-
-              div.waiting div.summary {{
-              }}
-
-              div.row {{
-                width: 100%;
-                clear: both;
-              }}
-
-              div.box {{
-                //border: solid black 1pt;
-              padding-top: .5em;
-              padding-bottom: .5em;
-              }}
-
-              div.collapser {{
-                width: 1.5em;
-                float: left;
-                text-align: center;
-              }}
-
-              div.phase-name {{
-                color: white;
-                background-color: gray;
-              }}
-
-              div.icon {{
-                width: 1.5em;
-                float: left;
-                text-align: center;
-              }}
-
-              div.spacer {{
-                width: 1.5em;
-                float: left;
-                background-color: white;
-              }}
-
-              div.time {{
-                float: right;
-                text-align: right;
-                padding-right: 1em;
-              }}
-
-              div.outcome {{
-                float: right;
-                width: 20em;
-                padding-left: .5em;
-                padding-right: .5em;
-              }}
-
-              div.description {{
-                padding-left: .5em;
-                overflow: auto;
-              }}
-
-              div.actions {{
-                float: right;
-                padding-right: 1em;
-              }}
-
-              div.right {{
-                float: right;
-              }}
-
-              pre {{
-                margin: 0;
-                padding: .5em;
-                line-height: 1.3em;
-                border: 1px solid #cccccc;
-                border-radius: .5em;
-                overflow: auto;
-              }}
-
-              div.transcript pre {{
-                background-color: black;
-              }}
-
-              div.script {{
-//                padding-bottom: 0;
-              }}
-
-              div.script pre {{
-                background-color: #eeeeee;
-              }}
-
-              div.stack-trace pre {{
-                background-color: #ffdddd;
-              }}
-
-              div.mono {{
-                padding-top: 0;
-              }}
-
-              div.stdout {{
-                color: lightgray;
-              }}
-
-              div.stderr {{
-                color: #ee6666;
-              }}
-
-              a i {{
-                text-decoration: none !important;
-                color: inherit;
-              }}
-
-              @keyframes spinup {{
-                from {{ transform: rotate(90deg); }}
-                to {{ transform: rotate(0deg); }}
-              }}
-
-              @keyframes spindown {{
-                from {{ transform: rotate(0deg); }}
-                to {{ transform: rotate(90deg); }}
-              }}
-
-              div.spinup {{
-                animation: spinup 200ms;
-              }}
-
-              div.spindown {{
-                animation: spindown 200ms;
-                animation-fill-mode: forwards;
-              }}
-
-              div.actions i {{
-                cursor: pointer;
-              }}
-
-              div.actions i.toggle-on {{
-                color: black;
-              }}
-
-              div.actions i.toggle-off {{
-                color: #dddddd;
-              }}
-
-              div.mandate.hidden {{
-                display: none;
-              }}
-
-              div.summary {{
-                margin-top: 1px;
-              }}
-            </style>
             <script type="text/javascript" src="../code.js"></script>
           </head>
           <body>

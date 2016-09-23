@@ -1,10 +1,13 @@
 package org.scalawag.jibe.mandate
 
-case class MandateResults(mandate: Mandate,
+case class MandateResults(description: Option[String],
                           outcome: MandateResults.Outcome.Value,
+                          composite: Boolean,
                           startTime: Long,
-                          endTime: Long,
-                          innards: Iterable[MandateResults] = Iterable.empty)
+                          endTime: Long)
+//{
+//  val elapsedTime = endTime - startTime
+//}
 
 object MandateResults {
   object Outcome extends Enumeration {
@@ -13,7 +16,3 @@ object MandateResults {
     val USELESS = Value
   }
 }
-
-
-
-
