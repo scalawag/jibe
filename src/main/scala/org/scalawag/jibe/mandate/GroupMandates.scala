@@ -1,8 +1,6 @@
 package org.scalawag.jibe.mandate
 
-import java.io.File
-import org.scalawag.jibe.FileUtils._
-import org.scalawag.jibe.backend.{Commander, GroupResource}
+import org.scalawag.jibe.backend.GroupResource
 
 case class Group(name: String,
                  gid: Option[Int] = None,
@@ -17,19 +15,19 @@ case class CreateOrUpdateGroup(group: Group) extends CheckableMandate {
 
   override def consequences = Iterable(GroupResource(group.name))
 
-  override def isActionCompleted(commander: Commander, resultsDir: File): Boolean =
-    commander.execute(resultsDir / "isActionCompleted", command.DoesGroupExist(group))
+  override def isActionCompleted(implicit context: MandateExecutionContext): Boolean =
+    runCommand("isActionCompleted", command.DoesGroupExist(group))
 
-  override def takeAction(commander: Commander, resultsDir: File): Unit =
-    commander.execute(resultsDir / "takeAction", command.CreateOrUpdateGroup(group))
+  override def takeAction(implicit context: MandateExecutionContext): Unit =
+    runCommand("takeAction", command.CreateOrUpdateGroup(group))
 }
 
 case class DeleteGroup(name: String) extends CheckableMandate {
   override val description = Some(s"update group: ${name}")
 
-  override def isActionCompleted(commander: Commander, resultsDir: File): Boolean =
-    ! commander.execute(resultsDir / "isActionCompleted", command.DoesGroupExist(Group(name)))
+  override def isActionCompleted(implicit context: MandateExecutionContext): Boolean =
+    ! runCommand("isActionCompleted", command.DoesGroupExist(Group(name)))
 
-  override def takeAction(commander: Commander, resultsDir: File): Unit =
-    commander.execute(resultsDir / "takeAction", command.DeleteGroup(name))
+  override def takeAction(implicit context: MandateExecutionContext): Unit =
+    runCommand("takeAction", command.DeleteGroup(name))
 }

@@ -9,6 +9,9 @@ import org.scalawag.jibe.backend._
 import org.scalawag.jibe.mandate._
 import org.scalawag.timber.backend.receiver.formatter.timestamp.ISO8601TimestampFormatter
 import Logging._
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Future}
 
 object Main {
 
@@ -65,7 +68,11 @@ object Main {
 
       val date = ISO8601TimestampFormatter(TimeZone.getTimeZone("UTC")).format(System.currentTimeMillis)
       val resultsDir = new File("results") / date
-      val results = Executive.takeActionIfNeeded(resultsDir / "raw", commanders.map(_ -> orderedMandate).toMap)
+      val futures = commanders map { commander =>
+        Future(Executive.takeActionIfNeeded(resultsDir / "raw" / commander.toString, commander, orderedMandate))
+      }
+
+      Await.ready(Future.sequence(futures), Duration.Inf) // TODO: eventually go all asynchronous?
 
       Reporter.generate(resultsDir / "raw", resultsDir / "html" / "index.html", resultsDir.getParentFile / "latest.html")
     } catch {

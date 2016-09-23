@@ -9,9 +9,9 @@ abstract class CompositeMandateBase[A <: Mandate](override val description: Opti
 
   override def prerequisites = (mandates.flatMap(_.prerequisites).toSet -- consequences)
 
-  override def takeAction(commander: Commander, resultsDir: File): Unit =
-    foreachMandateWithDirectory(resultsDir, unitReducer) { (mandate, subdir) =>
-      Executive.executeMandate(Executive.TAKE_ACTION)(subdir, commander, mandate)
+  override def takeAction(implicit context: MandateExecutionContext): Unit =
+    foreachMandateWithDirectory(context.resultsDir, unitReducer) { (mandate, subdir) =>
+      Executive.executeMandate(Executive.TAKE_ACTION)(subdir, context.commander, mandate)
     }
 
   protected[this] val booleanReducer = { (l: Boolean, r: Boolean) => l || r }
@@ -35,14 +35,14 @@ case class CompositeMandate(override val description: Option[String], mandates: 
 case class CheckableCompositeMandate(override val description: Option[String], mandates: Seq[CheckableMandate], fixedOrder: Boolean = false)
   extends CompositeMandateBase[CheckableMandate](description, mandates, fixedOrder) with CheckableMandate {
 
-  override def isActionCompleted(commander: Commander, resultsDir: File): Boolean =
-    foreachMandateWithDirectory(resultsDir, booleanReducer) { (mandate, subdir) =>
-      Executive.executeMandate(Executive.IS_ACTION_COMPLETED)(subdir, commander, mandate)
+  override def isActionCompleted(implicit context: MandateExecutionContext): Boolean =
+    foreachMandateWithDirectory(context.resultsDir, booleanReducer) { (mandate, subdir) =>
+      Executive.executeMandate(Executive.IS_ACTION_COMPLETED)(subdir, context.commander, mandate)
     }
 
-  override def takeActionIfNeeded(commander: Commander, resultsDir: File): Boolean =
-    foreachMandateWithDirectory(resultsDir, booleanReducer) { (mandate, subdir) =>
-      Executive.executeMandate(Executive.TAKE_ACTION_IF_NEEDED)(subdir, commander, mandate)
+  override def takeActionIfNeeded(implicit context: MandateExecutionContext): Boolean =
+    foreachMandateWithDirectory(context.resultsDir, booleanReducer) { (mandate, subdir) =>
+      Executive.executeMandate(Executive.TAKE_ACTION_IF_NEEDED)(subdir, context.commander, mandate)
     }
 }
 

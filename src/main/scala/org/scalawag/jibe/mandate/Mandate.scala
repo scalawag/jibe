@@ -1,9 +1,8 @@
 package org.scalawag.jibe.mandate
 
-import java.io.File
-import org.scalawag.jibe.backend.{Commander, Resource}
-
-import scala.util.{Success, Try}
+import org.scalawag.jibe.backend.Resource
+import org.scalawag.jibe.mandate.command.{UnitCommand, BooleanCommand, Command}
+import org.scalawag.jibe.FileUtils._
 
 /** A Mandate is an operation that can be executed against a system.  It may be realized as a series of system-specific
   * commands or it can be an aggregation of several other Mandates.
@@ -20,23 +19,35 @@ trait Mandate {
 
   // Unit -> action was successfully taken
   // throw -> error
-  def takeAction(commander: Commander, resultsDir: File): Unit
+  def takeAction(implicit context: MandateExecutionContext): Unit
 
   override def toString = description.getOrElse(super.toString)
+
+  protected[this] def runCommand(label: String, command: Command)(implicit context: MandateExecutionContext) = {
+    context.commander.execute(context.resultsDir / label, command)
+  }
+
+  protected[this] def runCommand(label: String, command: BooleanCommand)(implicit context: MandateExecutionContext) = {
+    context.commander.execute(context.resultsDir / label, command)
+  }
+
+  protected[this] def runCommand(label: String, command: UnitCommand)(implicit context: MandateExecutionContext) = {
+    context.commander.execute(context.resultsDir / label, command)
+  }
 }
 
 trait CheckableMandate extends Mandate {
   // true -> action is not needed
   // false -> action is needed
-  def isActionCompleted(commander: Commander, resultsDir: File): Boolean
+  def isActionCompleted(implicit context: MandateExecutionContext): Boolean
 
   // false -> action was unneeded
   // true -> action was needed and completed
-  def takeActionIfNeeded(commander: Commander, resultsDir: File): Boolean =
-    if ( isActionCompleted(commander, resultsDir) ) {
+  def takeActionIfNeeded(implicit context: MandateExecutionContext): Boolean =
+    if ( isActionCompleted(context) ) {
       false
     } else {
-      takeAction(commander, resultsDir)
+      takeAction(context)
       true
     }
 }
