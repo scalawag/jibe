@@ -8,7 +8,7 @@ scalaVersion := "2.11.8"
 
 resolvers ++= Seq (
   "JAnalyse Repository" at "http://www.janalyse.fr/repository/",
-  "sonatype-oss-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"
+  Resolver.sonatypeRepo("releases")
 )
 
 libraryDependencies ++= Seq(
@@ -17,8 +17,8 @@ libraryDependencies ++= Seq(
   "org.scala-graph" %% "graph-core" % "1.11.2",
   "org.scala-lang" % "scala-xml" % "2.11.0-M4",
   "io.spray" %% "spray-json" % "1.3.2",
-  "org.scalawag.timber" %% "timber-backend" % "0.6.0-SNAPSHOT",
-  "org.scalawag.timber" %% "slf4j-over-timber" % "0.6.0-SNAPSHOT"
+  "org.scalawag.timber" %% "timber-backend" % "0.6.0",
+  "org.scalawag.timber" %% "slf4j-over-timber" % "0.6.0"
 )
 
 libraryDependencies ++= Seq (
