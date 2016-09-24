@@ -17,9 +17,10 @@ object Main {
 
   def main(args: Array[String]): Unit = {
 
-    val commanders = Iterable(
+    val commanders = List(
       "192.168.212.11",
-      "192.168.212.12"
+      "192.168.212.12",
+      "192.168.212.13"
     ) map { ip =>
       new UbuntuCommander(SshInfo(ip, "vagrant", "vagrant", 22),sudo = true)
     }
@@ -34,13 +35,18 @@ object Main {
     def AddUsersToGroup(group: String, users: String*) =
       new CheckableCompositeMandate(Some(s"add multiple users to group $group"), users.map(AddUserToGroups(_, group)))
 
-    val mandate = new CheckableCompositeMandate(None, Seq(
+    val mandates1 = new CheckableCompositeMandate(None, Seq(
       CreateEveryoneUser("ernie"),
       CreateEveryoneUser("bert"),
       AddUsersToGroup("bedroom", "ernie", "bert"),
       CreateOrUpdateGroup(Group("bedroom", gid = Some(1064))),
       CreateOrUpdateUser(User("oscar", primaryGroup = Some("grouch"), home = Some("/tmp"), uid = Some(5005))),
-      SendLocalFile(new File("build.sbt"), new File("/tmp/blah"))
+      SendLocalFile(new File("build.sbt"), new File("/tmp/blah")),
+      ExitWithArgument(34)
+    ))
+
+    val mandates2 = new CheckableCompositeMandate(None, Seq(
+      NoisyMandate
     ))
 
     def dumpMandate(pw: PrintWriter, mandate: Mandate, depth: Int = 0): Unit = {
@@ -57,19 +63,25 @@ object Main {
     }
 
     try {
-      val orderedMandate = Orderer.order(mandate)
+      val orderedMandate = Orderer.order(mandates1)
 
       log.debug { pw: PrintWriter =>
         pw.println("mandates before/after ordering:")
-        dumpMandate(pw, mandate)
+        dumpMandate(pw, mandates1)
         pw.println("=" * 120)
         dumpMandate(pw, orderedMandate)
       }
 
+      val mandateMap = Map(
+        commanders(0) -> orderedMandate,
+        commanders(1) -> mandates2,
+        commanders(2) -> mandates1
+      )
+
       val date = ISO8601TimestampFormatter(TimeZone.getTimeZone("UTC")).format(System.currentTimeMillis)
       val runResultsDir = new File("results") / date
-      val futures = commanders map { commander =>
-        Future(Executive.takeActionIfNeeded(runResultsDir / "raw" / commander.toString, commander, orderedMandate))
+      val futures = mandateMap map { case (commander, mandate) =>
+        Future(Executive.takeActionIfNeeded(runResultsDir / "raw" / commander.toString, commander, mandate))
       }
 
       Await.ready(Future.sequence(futures), Duration.Inf) // TODO: eventually go all asynchronous?

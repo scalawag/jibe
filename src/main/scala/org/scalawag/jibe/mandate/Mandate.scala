@@ -34,6 +34,8 @@ trait Mandate {
   protected[this] def runCommand(label: String, command: UnitCommand)(implicit context: MandateExecutionContext) = {
     context.commander.execute(context.resultsDir / label, command)
   }
+
+  protected[this] def log(implicit context: MandateExecutionContext) = context.log
 }
 
 trait CheckableMandate extends Mandate {

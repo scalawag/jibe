@@ -102,17 +102,39 @@ object Reporter {
       case MandateResults.Outcome.USELESS => ("skipped", "fa fa-times")
     }
 
-    val exceptionFile = dir / "stack-trace"
-
-    val innards =
-      if ( exceptionFile.exists ) {
-        <div shutter={rowId} shuttered="true" class="row mono">
-          {spacers(depth)}
+    val stackTraceFile = dir / "stack-trace"
+    val stackTraceNodes =
+      if ( stackTraceFile.exists ) {
+        <div class="row mono">
+          {spacers(depth + 1)}
           <div class="box stack-trace">
-            <pre>{ Source.fromFile(exceptionFile).mkString }</pre>
+            <pre>{ Source.fromFile(stackTraceFile).mkString }</pre>
           </div>
         </div>
-      } else if ( mr.composite ) {
+      } else {
+        NodeSeq.Empty
+      }
+
+    val logFile = dir / "log"
+    val logNodes =
+      if ( logFile.exists ) {
+        <div class="row mono">
+          {spacers(depth + 1)}
+          <div class="box log">
+            <pre>{
+              Source.fromFile(logFile).getLines map { l =>
+                val Array(level, timestamp, msg) = l.split("\\|", 3)
+                <div class={level} title={timestamp}>{msg}</div>
+              }
+            }</pre>
+          </div>
+        </div>
+      } else {
+        NodeSeq.Empty
+      }
+
+    val innards =
+      if ( mr.composite ) {
         dir.listFiles(dirFilter).zipWithIndex.flatMap { case (m, n) =>
           mandate(m, depth + 1, s"${rowId}_${n}")
         }.toSeq
@@ -132,6 +154,8 @@ object Reporter {
         <div class="box description" shutter-control={rowId}>{description.getOrElse(mr.description.getOrElse(""))}&nbsp;</div>
       </div>
       <div shutter={rowId} shuttered="true">
+        {stackTraceNodes}
+        {logNodes}
         {innards}
       </div>
     </div>

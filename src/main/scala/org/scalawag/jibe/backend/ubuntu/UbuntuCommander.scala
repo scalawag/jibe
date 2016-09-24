@@ -54,6 +54,9 @@ class UbuntuCommander(ssh: SshInfo, sudo: Boolean = false) extends SecureShellBa
         case RemoveUserFromGroups(user, groups) =>
           execResource(resultsDir, scriptFor(command), Map("targetUser" -> user, "targetGroups" -> groups.mkString(" ")))
 
+        case ExitWithArgument(ec) =>
+          execResource(resultsDir, scriptFor(command), Map("ec" -> ec))
+
         case _ =>
           throw new RuntimeException(s"Commander ${this.getClass.getName} does not support the command $command.")
 

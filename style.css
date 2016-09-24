@@ -108,7 +108,9 @@ div.script pre {
 }
 
 div.stack-trace pre {
-  background-color: #ffdddd;
+  background-color: red;
+  color: white;
+  border-color: black;
 }
 
 div.mono {
@@ -121,6 +123,26 @@ div.stdout {
 
 div.stderr {
   color: #ee6666;
+}
+
+div.log pre {
+  background: black;
+}
+
+div.log div.d {
+  color: purple;
+}
+
+div.log div.i {
+  color: #dddddd;
+}
+
+div.log div.w {
+  color: yellow;
+}
+
+div.log div.e {
+  color: red;
 }
 
 @keyframes spinup {
