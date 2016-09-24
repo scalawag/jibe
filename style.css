@@ -86,63 +86,8 @@ div.right {
   float: right;
 }
 
-pre {
-  margin: 0;
-  padding: .5em;
-  line-height: 1.3em;
-  border: 1px solid #cccccc;
-  border-radius: .5em;
-  overflow: auto;
-}
-
-div.transcript pre {
-  background-color: black;
-}
-
-div.script {
-//  padding-bottom: 0;
-}
-
-div.script pre {
-  background-color: #eeeeee;
-}
-
-div.stack-trace pre {
-  background-color: red;
-  color: white;
-  border-color: black;
-}
-
 div.mono {
   padding-top: 0;
-}
-
-div.stdout {
-  color: lightgray;
-}
-
-div.stderr {
-  color: #ee6666;
-}
-
-div.log pre {
-  background: black;
-}
-
-div.log div.d {
-  color: purple;
-}
-
-div.log div.i {
-  color: #dddddd;
-}
-
-div.log div.w {
-  color: yellow;
-}
-
-div.log div.e {
-  color: red;
 }
 
 @keyframes spinup {
@@ -182,4 +127,97 @@ div.mandate.hidden {
 
 div.summary {
   margin-top: 1px;
+}
+
+
+div.log {
+  background: black;
+  overflow: auto;
+}
+
+div.log div.line {
+  font-family: monospace;
+  white-space: pre;
+  padding-left: .5em;
+  padding-top: .1em;
+  padding-bottom: .1em;
+}
+
+div.log div.collapser {
+  width: 1em;
+}
+
+div.log > div.line {
+  padding-left: 1.5em;
+}
+
+div.log div.dbg {
+  color: purple;
+}
+
+div.log div.inf {
+  color: #dddddd;
+}
+
+div.log div.wrn {
+  color: yellow;
+}
+
+div.log > div.err {
+  color: red;
+}
+
+div.log div.section {
+  padding: 0;
+}
+
+div.log div.command {
+  background-color: #4C2882;
+  color: lightgray;
+  padding: 0;
+}
+
+div.log div.command div.section.content {
+  background-color: #aaaaaa;
+  color: #4C2882;
+}
+
+div.log div.command div.section.output {
+  background-color: black;
+  color: lightgray;
+}
+
+div.log div.command div.section.output div.line.ERR {
+  color: #ee6666;
+}
+
+div.log div.command div.start {
+}
+
+
+div.log div.command div.output.INF {
+  color: lightgray;
+  background-color: black;
+}
+
+
+div.log div.command div.exit {
+  background-color: #4C2882;
+  color: lightgray;
+}
+
+div.log div.collapser {
+//  width: inherit;
+//  padding: 0;
+}
+
+div.collapser-insert {
+  padding: 0;
+  overflow: auto;
+}
+
+div.log div.stack-trace {
+  background-color: #C41E2A;
+  color: lightgray;
+  padding: 0;
 }

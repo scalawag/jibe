@@ -2,15 +2,17 @@ package org.scalawag.jibe.backend
 
 import java.io._
 import org.scalawag.jibe.FileUtils._
+import org.scalawag.jibe.mandate.MandateExecutionContext
+import MandateExecutionLogging._
 import scala.io.Source
 
 class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false) {
 
   // Command can include bash scripting with ';' and '&&' and can use environment variables
 
-  def exec(resultsDir: File, command: String): Int =
+  def exec(mcontext: MandateExecutionContext, command: String): Int =
     execInternal(
-      resultsDir,
+      mcontext,
       if ( sudo )
         s"""sudo /bin/bash <<'EOS'
            |$command
@@ -20,7 +22,7 @@ class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false) {
       null
     )
 
-  def execResource(resultsDir: File, scriptPath: String, context: Map[String, Any]): Int = {
+  def execResource(mcontext: MandateExecutionContext, scriptPath: String, context: Map[String, Any]): Int = {
     val scriptResource = Option(this.getClass.getResourceAsStream(scriptPath)) getOrElse {
       throw new RuntimeException(s"unable to load script resource from classpath: $scriptPath")
     }
@@ -35,16 +37,16 @@ class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false) {
         contextLines ++ scriptLines
 
     execInternal(
-      resultsDir,
+      mcontext,
       fullScript.mkString(endl),
       null
     )
   }
 
-  def scp(resultsDir: File, source: File, destination: File, mode: String = "0644"): Int = {
+  def scp(mcontext: MandateExecutionContext, source: File, destination: File, mode: String = "0644"): Int = {
     import scala.collection.JavaConversions._
     execInternal(
-      resultsDir,
+      mcontext,
       s"${ if ( sudo ) "/usr/bin/sudo " else "" }/usr/bin/scp -t $destination",
       new SequenceInputStream(Iterator(
         new ByteArrayInputStream(s"C$mode ${source.length} ${source.getName}\n".getBytes),
@@ -54,87 +56,56 @@ class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false) {
     )
   }
 
-  private[this] def execInternal(resultsDir: File, command: String, stdin: InputStream): Int =
+  private[this] def execInternal(mcontext: MandateExecutionContext, command: String, stdin: InputStream): Int = {
+    // Log here so that it appears even when something prevents the connection.
+    mcontext.log.debug(CommandContent)(command)
+
     Sessions.withChannel(ssh) { c =>
       c.setInputStream(stdin)
 
-      writeFileWithOutputStream(resultsDir / "output") { out =>
-        val demux = new DemuxOutputStream(out)
+      // JSch will close these for us.
+      c.setOutputStream(new OutputStreamToLogger(mcontext.log.info(CommandOutput)(_)))
+      c.setErrStream(new OutputStreamToLogger(mcontext.log.error(CommandOutput)(_)))
 
-        // JSch will close these for us.
-        c.setOutputStream(demux.createChannel("O:"))
-        c.setErrStream(demux.createChannel("E:"))
+      c.setCommand(command)
+      c.connect()
 
-        writeFileWithPrintWriter(resultsDir / "script") { w =>
-          w.print(command)
-        }
+      // TODO: maybe not block here and use futures instead.
+      val expiry = System.currentTimeMillis + 10000
+      while ( !c.isClosed && System.currentTimeMillis < expiry )
+        Thread.sleep(100)
 
-        c.setCommand(command)
-        c.connect()
-
-        // TODO: maybe not block here and use futures instead.
-        while ( !c.isClosed )
-          Thread.sleep(100)
-
-        c.disconnect()
-
-        writeFileWithPrintWriter(resultsDir / "exitCode") { ec =>
-          ec.print(c.getExitStatus)
-        }
-      }
+      c.disconnect()
 
       c.getExitStatus
     }
+  }
 
   private[this] val endl = System.getProperty("line.separator")
 
-  /** This is a class that acts kind of like a console.  We use it to create two OutputStreams (one for stdout and
-    * one for stderr) and it keeps track of which stream is sending which bytes.  It makes sure that the lines are
-    * each from a single stream and tags each line with a prefix so that we can tell which stream it came from.
-    * This way, we can see the stdout and stderr streams interleaved approximately how that came out of the subprocess
-    * instead of seeing them separately.
-    *
-    * @param demux the OutputStream that will receive all of the tagged bytes.
-    */
+  private[this] class OutputStreamToLogger(flushFn: String => Unit) extends OutputStream {
+    private[this] var buffer: Seq[Byte] = Seq.empty
 
-  class DemuxOutputStream(demux: OutputStream) {
-    private[this] var channels: List[Channel] = Nil
+    // TODO: This class could be quite a bit more efficient if we handle all of the OutputStream methods instead of
+    // TODO: just the bare minimum.  Right now, everything will get written byte-by-byte.  I don't know how much that
+    // TODO: matters, since we're reading stuff across a network, it's probably pretty slow anyway.
 
-    private[this] val lock = new Object
-
-    private[this] class Channel(tag: String) extends OutputStream {
-      private[this] var buffer: Seq[Byte] = Seq.empty
-
-      // TODO: This class could be quite a bit more efficient if we handle all of the OutputStream methods instead of
-      // TODO: just the bare minimum.  Right now, everything will get written byte-by-byte.  I don't know how much that
-      // TODO: matters, since we're reading stuff across a network, it's probably pretty slow anyway.
-
-      override def write(b: Int) = {
-        val s = new String(Array(b.toByte))
-        if ( s == endl )
-          flushBuffer()
-        else
-          buffer :+= b.toByte
-      }
-
-      def flushBuffer() =
-        if ( ! buffer.isEmpty ) {
-          lock.synchronized {
-            demux.write(tag.getBytes)
-            demux.write(buffer.toArray)
-            demux.write(endl.getBytes)
-          }
-          buffer = Seq.empty
-        }
+    override def write(b: Int) = {
+      val s = new String(Array(b.toByte))
+      if ( s == endl )
+        flushBuffer()
+      else
+        buffer :+= b.toByte
     }
 
-    def createChannel(tag: String): OutputStream = new Channel(tag)
-
-    def close(): Unit = {
-      channels.foreach { c =>
-        c.close()
-        c.flushBuffer()
+    def flushBuffer() =
+      if (!buffer.isEmpty) {
+        flushFn(new String(buffer.toArray)) // TODO: charset issues
+        buffer = Seq.empty
       }
+
+    override def close() = {
+      flushBuffer()
     }
   }
 }

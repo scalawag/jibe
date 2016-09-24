@@ -16,84 +16,106 @@ object Reporter {
     override def accept(f: File) = f.isDirectory
   }
 
-  private def scriptTable(label: String, dir: File, depth: Int, rowId: String): NodeSeq = {
-    val exitCode = Source.fromFile(dir / "exitCode").mkString.toInt
-    val script = Try(Some(Source.fromFile(dir / "script").mkString)).getOrElse(None)
-    val output = Try(Source.fromFile(dir / "output").getLines()).getOrElse(Iterable.empty)
-
-    val scriptId = s"${rowId}_s"
-    val outputId = s"${rowId}_o"
-
-    val outputElems =
-      {
-        if ( output.isEmpty )
-          NodeSeq.Empty
-        else
-          <div class="row mono" shutter={outputId} shuttered="true">
-            {spacers(depth + 1)}
-            <div class="box transcript">
-              <pre>{
-                output map { l =>
-                  val (spanClass, text) =
-                    if ( l.startsWith("E:") )
-                      ("stderr", l.substring(2))
-                    else if ( l.startsWith("O:") )
-                      ("stdout", l.substring(2))
-                    else
-                      ("stdout", l)
-
-                  <div class={spanClass}>{text}</div>
-                }
-              }</pre>
-            </div>
-          </div>
-      }
-
-    val scriptElems =
-    {
-      if ( script.isEmpty || script.get.isEmpty )
-        NodeSeq.Empty
-      else
-        <div class="row mono"  shutter={scriptId} shuttered="true">
-          {spacers(depth + 1)}
-          <div class="box script">
-            <pre>{script.get}</pre>
-          </div>
-        </div>
-    }
-
-    val outputStyle = "visibility: " + ( if ( outputElems.isEmpty ) "hidden" else "inherit" )
-    val scriptStyle = "visibility: " + ( if ( scriptElems.isEmpty ) "hidden" else "inherit" )
-
-    <div class="row phase-name">
-      {spacers(depth)}
-      <div class="box actions" shutter-control={scriptId} style={scriptStyle}>Script</div>
-      <div class="box right collapser" shutter-control={scriptId} style={scriptStyle} shutter-indicator={scriptId}><i class="fa fa-caret-right"></i></div>
-      <div class="box collapser" shutter-control={outputId} style={outputStyle} shutter-indicator={outputId}><i class="fa fa-caret-right"></i></div>
-      <div class="box description" shutter-control={outputId}>{label} => {exitCode}</div>
-    </div> ++ scriptElems ++ outputElems
-  }
-
   private def spacers(n: Int): NodeSeq = Seq.fill(n)(<div class="box spacer">&nbsp;</div>)
 
-  private def commandTable(dir: File, depth: Int, rowId: String): NodeSeq = {
-    val possibleDirsInOrder = List(
-      "isActionCompleted" -> "Already done?",
-      "test/isRemoteFileRightLength" -> "Length Check",
-      "test/isRemoteFileRightChecksum" -> "Content Check",
-      "takeAction" -> "Take Action"
-    )
+  // parses the raw log into structured data that's easier to format
+  private trait TopLevelElement
+  private case class LogLine(tag: String, level: String, timestamp: String, text: String) extends TopLevelElement
+  private case class Command(name: LogLine, content: Seq[LogLine] = Seq.empty, output: Seq[LogLine] = Seq.empty, exitCode: Option[LogLine] = None) extends TopLevelElement
+  private case class StackTrace(message: Seq[LogLine], location: Seq[LogLine] = Seq.empty) extends TopLevelElement
+  private case class ThrownException(traces: Seq[StackTrace]) extends TopLevelElement
 
-    possibleDirsInOrder.zipWithIndex flatMap { case ((dirName, label), n) =>
-      val d = dir / dirName
-      // exitCode will always be present in a directory that represents script output.  Use that as an indicator.
-      if ( ( d / "exitCode" ).exists )
-        scriptTable(label, d, depth, s"${rowId}_${n}")
-      else NodeSeq.Empty
-    }
+  private def parseLogLine(s: String) = {
+    val Array(tag, level, timestamp, text) = s.split("\\|", 4)
+    LogLine(tag, level, timestamp, text)
   }
 
-  def mandate(dir: File, depth: Int, rowId: String, description: Option[String] = None, icon: Option[String] = None): NodeSeq = {
+  private def parseLog(log: Iterator[String]): Iterator[TopLevelElement] = {
+    val lines = log.map(parseLogLine)
+
+    def helper(current: Option[TopLevelElement]): Stream[TopLevelElement] = {
+      if (lines.hasNext) {
+        val line = lines.next()
+
+        line.tag match {
+
+          // What to do when it's a plain log line, flush anything currently buffered and set up the line
+
+          case "" =>
+
+            current match {
+              case Some(x) =>
+                x #:: helper(Some(line))
+              case None =>
+                helper(Some(line))
+            }
+
+          // What to do when it's an exception stack trace line
+
+          case "EE" =>
+
+            current match {
+              case None =>
+                // Start a new StackTrace
+                helper(Some(StackTrace(Seq(line),Seq.empty)))
+
+              case Some(st: StackTrace) =>
+                // Append to the existing StackTrace - determine what kind of line it is based on the prefix
+                if ( line.text.startsWith("\tat ") || line.text.startsWith("\t...") )
+                  helper(Some(st.copy(location = st.location :+ line)))
+                else {
+                  if ( st.location.isEmpty )
+                    helper(Some(st.copy(message = st.message :+ line)))
+                  else
+                    st #:: helper(Some(StackTrace(Seq(line))))
+                }
+
+              case Some(x) =>
+                // Something's on deck that's not a StackTrace, emit that and start a StackTrace
+                x #:: helper(Some(StackTrace(Seq(line))))
+            }
+
+          // What to do when it's anything else (which means it's part of a Command structure, for now)...
+
+          case "CS" =>
+            current match {
+              case Some(x) =>
+                x #:: helper(Some(Command(line)))
+              case None =>
+                helper(Some(Command(line)))
+            }
+
+          case "CC" =>
+
+            current match {
+              case Some(c: Command)  =>
+                helper(Some(c.copy(content = c.content :+ line)))
+            }
+
+          case "CO" =>
+
+            current match {
+              case Some(c: Command)  =>
+                helper(Some(c.copy(output = c.output :+ line)))
+            }
+
+          case "CE" =>
+
+            current match {
+              case Some(c: Command)  =>
+                c.copy(exitCode = Some(line)) #:: helper(None)
+            }
+
+        }
+      } else {
+        current.toStream
+      }
+    }
+
+    helper(None).iterator
+  }
+
+  private def mandate(dir: File, depth: Int, rowId: String, description: Option[String] = None, icon: Option[String] = None): NodeSeq = {
     val mr = Source.fromFile(dir / "mandate.js").mkString.parseJson.convertTo[MandateResults]
 
     val (outcomeClass, outcomeIcon) = mr.outcome match {
@@ -102,32 +124,85 @@ object Reporter {
       case MandateResults.Outcome.USELESS => ("skipped", "fa fa-times")
     }
 
-    val stackTraceFile = dir / "stack-trace"
-    val stackTraceNodes =
-      if ( stackTraceFile.exists ) {
-        <div class="row mono">
-          {spacers(depth + 1)}
-          <div class="box stack-trace">
-            <pre>{ Source.fromFile(stackTraceFile).mkString }</pre>
-          </div>
-        </div>
-      } else {
-        NodeSeq.Empty
-      }
-
     val logFile = dir / "log"
     val logNodes =
       if ( logFile.exists ) {
         <div class="row mono">
           {spacers(depth + 1)}
-          <div class="box log">
-            <pre>{
-              Source.fromFile(logFile).getLines map { l =>
-                val Array(level, timestamp, msg) = l.split("\\|", 3)
-                <div class={level} title={timestamp}>{msg}</div>
-              }
-            }</pre>
-          </div>
+          <div class="log">{
+            var nextShutterId = -1
+            def allocateShutterId: String = {
+              nextShutterId += 1
+              s"${rowId}_$nextShutterId"
+            }
+
+            parseLog(Source.fromFile(logFile).getLines) map {
+              case line: LogLine =>
+                import line._
+                <div class={level + " line " + tag} title={timestamp}>{text}</div>
+
+              case cmd: Command =>
+                val sid = allocateShutterId
+
+                <div class="command">
+                  <div class="collapser" shutter-control={sid} shutter-indicator={sid}><span class="fa fa-caret-right"></span></div>
+                  <div class="collapser-insert">
+                    <div class="section start">
+                      <div class="line" shutter-control={sid}>Command: {cmd.name.text}</div> <!-- TODO: timestamp -->
+                    </div>
+                    <div class="section content" shutter={sid} shuttered="true">
+                      {
+                        cmd.content map { cc =>
+                          import cc._
+                          <div class="line" title={timestamp}>{text}</div>
+                        }
+                      }
+                    </div>
+                    <div class="section output">
+                      {
+                        cmd.output map { co =>
+                          import co._
+                          <div class={"line " + level} title={timestamp}>{text}</div>
+                        }
+                      }
+                    </div>
+                    <div class="section exit">
+                      {
+                        cmd.exitCode.toSeq map { ec =>
+                          <div class="line" shutter-control={sid}>Exit Code = {ec.text}</div> <!-- TODO: timestamp -->
+                        }
+                      }
+                    </div>
+                  </div>
+                </div>
+
+              case st: StackTrace =>
+                val sid = allocateShutterId
+
+                <div class="stack-trace">
+                  <div class="collapser" shutter-control={sid} shutter-indicator={sid}><span class="fa fa-caret-right"></span></div>
+                  <div class="collapser-insert">
+                    <div class="message" shutter-control={sid}>
+                      {
+                        st.message map { line =>
+                          import line._
+                          <div class={"line message " + level} title={timestamp}>{text}</div>
+                        }
+                      }
+                    </div>
+                    <div class="location" shutter={sid} shuttered="true">
+                      {
+                        st.location map { line =>
+                          import line._
+                          <div class={"line location " + level} title={timestamp}>{text}</div>
+                        }
+                      }
+                    </div>
+                  </div>
+                </div>
+
+            }
+          }</div>
         </div>
       } else {
         NodeSeq.Empty
@@ -139,7 +214,7 @@ object Reporter {
           mandate(m, depth + 1, s"${rowId}_${n}")
         }.toSeq
       } else {
-        commandTable(dir, depth + 1, rowId)
+        NodeSeq.Empty
       }
 
     val iconClass = icon.map( i => s"fa $i" ).getOrElse(outcomeIcon)
@@ -154,14 +229,13 @@ object Reporter {
         <div class="box description" shutter-control={rowId}>{description.getOrElse(mr.description.getOrElse(""))}&nbsp;</div>
       </div>
       <div shutter={rowId} shuttered="true">
-        {stackTraceNodes}
         {logNodes}
         {innards}
       </div>
     </div>
   }
 
-  def targets(dir: File): NodeSeq =
+  private def targets(dir: File): NodeSeq =
     dir.listFiles(dirFilter).zipWithIndex flatMap { case (d, n)  =>
       mandate(d, 0, s"r${n}_0", Some(d.getName), Some("fa-dot-circle-o"))
     } toSeq
@@ -172,6 +246,7 @@ object Reporter {
       pw.println(
         <html>
           <head>
+            <meta charset="utf-8" />
             <link rel="stylesheet" href="http://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css"/>
             <link rel="stylesheet" type="text/css" href="../../../style.css"/>
             <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.1/jquery.min.js"></script>

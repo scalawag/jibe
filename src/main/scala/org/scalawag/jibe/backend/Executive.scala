@@ -1,13 +1,10 @@
 package org.scalawag.jibe.backend
 
-import java.io.File
-
+import java.io.{File, PrintWriter}
 import org.scalawag.jibe.AbortException
 import org.scalawag.jibe.FileUtils._
 import org.scalawag.jibe.mandate.MandateResults.Outcome
 import org.scalawag.jibe.mandate._
-import org.scalawag.timber.api.Logger
-
 import scala.util.{Failure, Success, Try}
 
 object Executive {
@@ -19,52 +16,13 @@ object Executive {
   val isActionCompleted = executeMandate(IS_ACTION_COMPLETED)_
   val takeActionIfNeeded = executeMandate(TAKE_ACTION_IF_NEEDED)_
 
-  private[this] val singleLetterLevelFormatter = {
-    import org.scalawag.timber.backend.receiver.formatter.level.TranslatingLevelFormatter
-    import org.scalawag.timber.api.Level
-
-    new TranslatingLevelFormatter(Iterable(
-      Level(Level.DEBUG, "D"),
-      Level(Level.INFO , "I"),
-      Level(Level.WARN , "W"),
-      Level(Level.ERROR, "E")
-    ))
-  }
-
-  private[this] val mandateEntryFormatter = {
-    import org.scalawag.timber.backend.receiver.formatter.ProgrammableEntryFormatter
-    import org.scalawag.timber.backend.receiver.formatter.ProgrammableEntryFormatter.entry
-    import org.scalawag.timber.backend.receiver.formatter.timestamp.HumanReadableTimestampFormatter
-
-    new ProgrammableEntryFormatter(
-      Seq(
-        entry.level formattedWith singleLetterLevelFormatter,
-        entry.timestamp formattedWith HumanReadableTimestampFormatter
-      ),
-      firstLinePrefix = "",
-      continuationPrefix = "",
-      continuationHeader = ProgrammableEntryFormatter.ContinuationHeader.METADATA
-    )
-  }
-
-  private[this] def createMandateLogger(resultsDir: File) = {
-    import org.scalawag.timber.backend.dispatcher.configuration.dsl._
-    import org.scalawag.timber.backend.dispatcher.Dispatcher
-    import org.scalawag.timber.backend.dispatcher.configuration.Configuration
-    import org.scalawag.timber.backend.receiver.buffering.ImmediateFlushing
-    import org.scalawag.timber.backend.receiver.concurrency.Locking
-
-    val dispatcher = new Dispatcher(Configuration {
-      file((resultsDir / "log").getAbsolutePath, ImmediateFlushing, Locking)(mandateEntryFormatter)
-    })
-    new Logger()(dispatcher)
-  }
-
   def executeMandate[A <: Mandate, B](fn: (A, MandateExecutionContext) => B)(resultsDir: File, commander: Commander, mandate: A): B = {
+
+    val mec = MandateExecutionContext(commander, resultsDir, MandateExecutionLogging.createMandateLogger(resultsDir))
 
     val startTime = System.currentTimeMillis
     // Execute the mandate and catch any exceptions
-    val rv = Try(fn(mandate, MandateExecutionContext(commander, resultsDir, createMandateLogger(resultsDir))))
+    val rv = Try(fn(mandate, mec))
     val endTime = System.currentTimeMillis
 
     val outcome = rv match {
@@ -90,7 +48,7 @@ object Executive {
         // Don't write this to a stack-trace file.  It's already been done where the exception was thrown.
         // Rethrow so that mandate execution will cease.
       case ex =>
-        writeFileWithPrintWriter(resultsDir / "stack-trace") { pw =>
+        mec.log.error(MandateExecutionLogging.ExceptionStackTrace) { pw: PrintWriter =>
           ex.printStackTrace(pw)
         }
     }

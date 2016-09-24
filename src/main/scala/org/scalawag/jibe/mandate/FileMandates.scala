@@ -10,6 +10,8 @@ case class SendLocalFile(localPath: File, remotePath: File) extends CheckableMan
   override def consequences = Iterable(FileResource(remotePath.getAbsolutePath))
 
   override def isActionCompleted(implicit context: MandateExecutionContext): Boolean = {
+    import context._
+
     // Do a quick check that it exists and is the right length before proceeding.
 
     if (runCommand("isRemoteFileRightLength", IsRemoteFileLength(remotePath, localPath.length))) {

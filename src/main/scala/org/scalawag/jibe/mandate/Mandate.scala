@@ -1,8 +1,7 @@
 package org.scalawag.jibe.mandate
 
 import org.scalawag.jibe.backend.Resource
-import org.scalawag.jibe.mandate.command.{UnitCommand, BooleanCommand, Command}
-import org.scalawag.jibe.FileUtils._
+import org.scalawag.jibe.mandate.command.{BooleanCommand, Command, UnitCommand}
 
 /** A Mandate is an operation that can be executed against a system.  It may be realized as a series of system-specific
   * commands or it can be an aggregation of several other Mandates.
@@ -24,18 +23,17 @@ trait Mandate {
   override def toString = description.getOrElse(super.toString)
 
   protected[this] def runCommand(label: String, command: Command)(implicit context: MandateExecutionContext) = {
-    context.commander.execute(context.resultsDir / label, command)
+    context.commander.execute(context, command)
   }
 
   protected[this] def runCommand(label: String, command: BooleanCommand)(implicit context: MandateExecutionContext) = {
-    context.commander.execute(context.resultsDir / label, command)
+    context.commander.execute(context, command)
   }
 
   protected[this] def runCommand(label: String, command: UnitCommand)(implicit context: MandateExecutionContext) = {
-    context.commander.execute(context.resultsDir / label, command)
+    context.commander.execute(context, command)
   }
 
-  protected[this] def log(implicit context: MandateExecutionContext) = context.log
 }
 
 trait CheckableMandate extends Mandate {
