@@ -67,14 +67,14 @@ object Main {
       }
 
       val date = ISO8601TimestampFormatter(TimeZone.getTimeZone("UTC")).format(System.currentTimeMillis)
-      val resultsDir = new File("results") / date
+      val runResultsDir = new File("results") / date
       val futures = commanders map { commander =>
-        Future(Executive.takeActionIfNeeded(resultsDir / "raw" / commander.toString, commander, orderedMandate))
+        Future(Executive.takeActionIfNeeded(runResultsDir / "raw" / commander.toString, commander, orderedMandate))
       }
 
       Await.ready(Future.sequence(futures), Duration.Inf) // TODO: eventually go all asynchronous?
 
-      Reporter.generate(resultsDir / "raw", resultsDir / "html" / "index.html", resultsDir.getParentFile / "latest.html")
+      Reporter.generate(runResultsDir)
     } catch {
       case ex: AbortException => // System.exit(1) - bad within sbt
     } finally {

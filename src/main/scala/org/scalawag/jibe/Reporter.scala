@@ -142,16 +142,16 @@ object Reporter {
       mandate(d, 0, s"r${n}_0", Some(d.getName), Some("fa-dot-circle-o"))
     } toSeq
 
-  def generate(input: File, output: File, symlink: File ): Unit = {
+  def generate(resultsDir: File): Unit = {
 
-    FileUtils.writeFileWithPrintWriter(output) { pw =>
+    FileUtils.writeFileWithPrintWriter(resultsDir / "html" / "index.html") { pw =>
       pw.println(
         <html>
           <head>
             <link rel="stylesheet" href="http://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css"/>
-            <link rel="stylesheet" type="text/css" href="../style.css"/>
+            <link rel="stylesheet" type="text/css" href="../../../style.css"/>
             <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.1/jquery.min.js"></script>
-            <script type="text/javascript" src="../code.js"></script>
+            <script type="text/javascript" src="../../../code.js"></script>
           </head>
           <body>
             <div class="row">
@@ -173,19 +173,19 @@ object Reporter {
               <div class="box actions">
                 <i class="fa fa-check toggle-on" outcome="success" onclick="toggleHide(this)" title="Hide Successful"></i>
               </div>
-              <div class="box description">{ input.getParentFile.getName }</div>
+              <div class="box description">{ resultsDir.getName }</div>
             </div>
 
-            { targets(input) }
+            { targets(resultsDir / "raw") }
           </body>
         </html>
       )
     }
 
     try {
-      val symlinkPath = symlink.toPath
+      val symlinkPath = ( resultsDir.getParentFile / "latest" ).toPath
       Files.deleteIfExists(symlinkPath)
-      Files.createSymbolicLink(symlinkPath, symlinkPath.getParent.relativize( output.toPath ))
+      Files.createSymbolicLink(symlinkPath, symlinkPath.getParent.relativize( resultsDir.toPath ))
     } catch {
       case uoe: UnsupportedOperationException => println("Your OS sucks. Got symlinks?")
       case unknown: Exception => println("Failed to Create symlink: " + unknown)
