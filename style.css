@@ -178,7 +178,7 @@ div.log div.command {
 }
 
 div.log div.command div.section.content {
-  background-color: #aaaaaa;
+  background-color: lightgray;
   color: #4C2882;
 }
 
@@ -220,4 +220,9 @@ div.log div.stack-trace {
   background-color: #C41E2A;
   color: lightgray;
   padding: 0;
+}
+
+div.log div.stack-trace div.line.location {
+  background-color: lightgray;
+  color: #C41E2A;
 }
