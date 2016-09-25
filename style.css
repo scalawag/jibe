@@ -53,10 +53,8 @@ div.icon {
   text-align: center;
 }
 
-div.spacer {
-  width: 1.5em;
-  float: left;
-  background-color: white;
+div.indent {
+  margin-left: 1.5em;
 }
 
 div.time {

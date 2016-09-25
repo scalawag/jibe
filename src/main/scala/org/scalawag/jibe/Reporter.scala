@@ -16,8 +16,6 @@ object Reporter {
     override def accept(f: File) = f.isDirectory
   }
 
-  private def spacers(n: Int): NodeSeq = Seq.fill(n)(<div class="box spacer">&nbsp;</div>)
-
   // parses the raw log into structured data that's easier to format
   private trait TopLevelElement
   private case class LogLine(tag: String, level: String, timestamp: String, text: String) extends TopLevelElement
@@ -128,7 +126,6 @@ object Reporter {
     val logNodes =
       if ( logFile.exists ) {
         <div class="row mono">
-          {spacers(depth + 1)}
           <div class="log">{
             var nextShutterId = -1
             def allocateShutterId: String = {
@@ -221,14 +218,13 @@ object Reporter {
 
     <div class={s"mandate $outcomeClass"}>
       <div class="row summary">
-        {spacers(depth)}
         <div class="box collapser" shutter-control={rowId} shutter-indicator={rowId}><i class="fa fa-caret-right"></i></div>
         <div class="box icon" shutter-control={rowId}><i class={iconClass}></i></div>
 <!--      <div class="box outcome"><div style="height: 1em; width: 20em; background: linear-gradient(to right, green 60%, yellow 60%);"></div></div> -->
         <div class="box time" shutter-control={rowId}>{mr.endTime - mr.startTime} ms</div>
         <div class="box description" shutter-control={rowId}>{description.getOrElse(mr.description.getOrElse(""))}&nbsp;</div>
       </div>
-      <div shutter={rowId} shuttered="true">
+      <div class="indent" shutter={rowId} shuttered="true">
         {logNodes}
         {innards}
       </div>
