@@ -26,7 +26,11 @@ class UbuntuCommander(ssh: SshInfo, sudo: Boolean = false) extends SecureShellBa
     try {
       command match {
 
-        case SendLocalFile(local, remote) => scp(context, local, remote)
+        case WriteRemoteFile(remotePath, content) =>
+          context.log.info(MandateExecutionLogging.CommandStart)(command.toString)
+          val ec = scp(context, content, remotePath)
+          context.log.info(MandateExecutionLogging.CommandExit)(ec.toString)
+          ec
 
         case IsRemoteFileLength(file, length) =>
           runScriptFor(command, Map("llen" -> length, "rpath" -> file))
