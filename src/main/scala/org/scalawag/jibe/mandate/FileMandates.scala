@@ -58,13 +58,14 @@ case class WriteRemoteFileFromTemplate(remotePath: File, template: FileContent, 
 
   private[this] def produceContent(implicit context: MandateExecutionContext): FileContent = {
     context.log.debug(s"generating content from template $template and values $values")
-    // Anything less than 8k or already in memory will be expanded in memory, anything larger than that and we'll
+    // Anything less than 16k or already in memory will be expanded in memory, anything larger than that and we'll
     // write a temp file.
     template match {
       case FileContentFromFile(f) =>
         context.log.debug(s"full path to template file is ${f.getAbsoluteFile}")
 
-        if ( f.length > 1 ) {
+        // Only use a temp file
+        if ( f.length > 16384 ) {
           val tf = File.createTempFile("jibe_",".tmp")
           context.log.debug(s"expanding template to a temporary file: $tf")
 
