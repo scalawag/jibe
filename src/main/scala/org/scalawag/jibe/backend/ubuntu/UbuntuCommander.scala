@@ -30,7 +30,7 @@ class UbuntuCommander(ssh: SshInfo, sudo: Boolean = false) extends SecureShellBa
           runScriptFor(Map("length" -> length, "file" -> file))
 
         case IsRemoteFileMD5(file, md5) =>
-          runScriptFor(Map("lmd5" -> md5, "rpath" -> file))
+          runScriptFor(Map("md5" -> md5, "file" -> file))
 
         case DoesGroupExist(group) =>
           runScriptFor(caseClassToContext("group", group))
