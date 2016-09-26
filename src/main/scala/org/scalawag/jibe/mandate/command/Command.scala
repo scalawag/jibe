@@ -1,7 +1,11 @@
 package org.scalawag.jibe.mandate.command
 
-trait Command
+// Supported parameter types here are determined by the Commander
 
-trait UnitCommand extends Command
+sealed trait Command[T]
 
-trait BooleanCommand extends Command
+trait IntCommand extends Command[Int]
+
+trait UnitCommand extends Command[Unit]
+
+trait BooleanCommand extends Command[Boolean]

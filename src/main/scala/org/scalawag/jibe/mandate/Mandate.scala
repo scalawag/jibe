@@ -22,18 +22,9 @@ trait Mandate {
 
   override def toString = description.getOrElse(super.toString)
 
-  protected[this] def runCommand(label: String, command: Command)(implicit context: MandateExecutionContext) = {
-    context.commander.execute(context, command)
+  protected[this] def runCommand[A](label: String, command: Command[A])(implicit context: MandateExecutionContext) = {
+    context.commander.execute(command)
   }
-
-  protected[this] def runCommand(label: String, command: BooleanCommand)(implicit context: MandateExecutionContext) = {
-    context.commander.execute(context, command)
-  }
-
-  protected[this] def runCommand(label: String, command: UnitCommand)(implicit context: MandateExecutionContext) = {
-    context.commander.execute(context, command)
-  }
-
 }
 
 trait CheckableMandate extends Mandate {

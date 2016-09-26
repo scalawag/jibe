@@ -43,9 +43,8 @@ object Main {
       CreateOrUpdateUser(User("oscar", primaryGroup = Some("grouch"), home = Some("/tmp"), uid = Some(5005))),
       WriteRemoteFile(new File("/tmp/blah"), new File("build.sbt")),
       WriteRemoteFileFromTemplate(new File("/tmp/hello"), new File("hello.ssp"), Map("name" -> "count")),
-      WriteRemoteFileFromTemplate(new File("/tmp/another"), "<%@ val noun: String %>\ntesting the ${noun}", Map("noun" -> "waters"))
-//    ,
-//      ExitWithArgument(34)
+      WriteRemoteFileFromTemplate(new File("/tmp/another"), "<%@ val noun: String %>\ntesting the ${noun}", Map("noun" -> "waters")),
+      ExitWithArgument(34)
     ))
 
     val mandates2 = new CheckableCompositeMandate(None, Seq(

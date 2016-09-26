@@ -1,7 +1,5 @@
 package org.scalawag.jibe.backend.ubuntu
 
-import java.io.File
-
 import org.scalawag.jibe.FileUtils._
 import org.scalawag.jibe.backend._
 import org.scalawag.jibe.mandate.MandateExecutionContext
@@ -13,64 +11,60 @@ import scala.reflect.runtime.currentMirror
 
 class UbuntuCommander(ssh: SshInfo, sudo: Boolean = false) extends SecureShellBackend(ssh, sudo) with Commander {
 
-  override def execute(context: MandateExecutionContext, command: Command): Int = {
+  override def execute[A](command: Command[A])(implicit context: MandateExecutionContext): A = {
     import context.resultsDir
 
-    def runScriptFor(command: Command, args: Map[String, Any]) = {
-      context.log.info(MandateExecutionLogging.CommandStart)(command.toString)
-      val ec = execResource(context, command.getClass.getSimpleName + ".sh", args)
-      context.log.info(MandateExecutionLogging.CommandExit)(ec.toString)
-      ec
+    def runScriptFor(args: Map[String, Any]): A = process(command) {
+      execResource(context, command.getClass.getSimpleName + ".sh", args)
     }
 
     try {
       command match {
 
         case WriteRemoteFile(remotePath, content) =>
-          context.log.info(MandateExecutionLogging.CommandStart)(command.toString)
-          val ec = scp(context, content, remotePath)
-          context.log.info(MandateExecutionLogging.CommandExit)(ec.toString)
-          ec
+          process(command) {
+            scp(context, content, remotePath)
+          }
 
         case IsRemoteFileLength(file, length) =>
-          runScriptFor(command, Map("llen" -> length, "rpath" -> file))
+          runScriptFor(Map("llen" -> length, "rpath" -> file))
 
         case IsRemoteFileMD5(file, md5) =>
-          runScriptFor(command, Map("lmd5" -> md5, "rpath" -> file))
+          runScriptFor(Map("lmd5" -> md5, "rpath" -> file))
 
         case DoesGroupExist(group) =>
-          runScriptFor(command, caseClassToContext("group", group))
+          runScriptFor(caseClassToContext("group", group))
 
         case CreateOrUpdateGroup(group) =>
-          runScriptFor(command, caseClassToContext("group", group))
+          runScriptFor(caseClassToContext("group", group))
 
         case DeleteGroup(groupName) =>
-          runScriptFor(command, Map("group" -> groupName))
+          runScriptFor(Map("group" -> groupName))
 
         case DoesUserExist(user) =>
-          runScriptFor(command, caseClassToContext("user", user))
+          runScriptFor(caseClassToContext("user", user))
 
         case CreateOrUpdateUser(user) =>
-          runScriptFor(command, caseClassToContext("user", user))
+          runScriptFor(caseClassToContext("user", user))
 
         case DeleteUser(userName) =>
-          runScriptFor(command, Map("user" -> userName))
+          runScriptFor(Map("user" -> userName))
 
         // Note, these are all the same!!!
         case IsUserInAllGroups(user, groups) =>
-          runScriptFor(command, Map("targetUser" -> user, "targetGroups" -> groups.mkString(" ")))
+          runScriptFor(Map("targetUser" -> user, "targetGroups" -> groups.mkString(" ")))
 
         case IsUserInAnyGroups(user, groups) =>
-          runScriptFor(command, Map("targetUser" -> user, "targetGroups" -> groups.mkString(" ")))
+          runScriptFor(Map("targetUser" -> user, "targetGroups" -> groups.mkString(" ")))
 
         case AddUserToGroups(user, groups) =>
-          runScriptFor(command, Map("targetUser" -> user, "targetGroups" -> groups.mkString(" ")))
+          runScriptFor(Map("targetUser" -> user, "targetGroups" -> groups.mkString(" ")))
 
         case RemoveUserFromGroups(user, groups) =>
-          runScriptFor(command, Map("targetUser" -> user, "targetGroups" -> groups.mkString(" ")))
+          runScriptFor(Map("targetUser" -> user, "targetGroups" -> groups.mkString(" ")))
 
         case ExitWithArgument(ec) =>
-          runScriptFor(command, Map("ec" -> ec))
+          runScriptFor(Map("ec" -> ec))
 
         case _ =>
           throw new RuntimeException(s"Commander ${this.getClass.getName} does not support the command $command.")
