@@ -95,7 +95,7 @@ case class WriteRemoteFileFromTemplate(remotePath: File, template: FileContent, 
       case FileContentFromArray(a) =>
 
         val engine = new TemplateEngine
-        val output = engine.layout(TemplateSource.fromText("internal", new String(a)), values) // TODO: charset?
+        val output = engine.layout(TemplateSource.fromText("internal.ssp", new String(a)), values) // TODO: charset?
 
         context.log.debug(s"content is this:\n$output")
 

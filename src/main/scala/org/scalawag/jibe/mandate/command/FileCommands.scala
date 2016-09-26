@@ -23,6 +23,7 @@ trait FileContent {
 object FileContent {
   implicit def apply(f: File) = new FileContentFromFile(f)
   implicit def apply(a: Array[Byte]) = new FileContentFromArray(a)
+  implicit def apply(s: String) = new FileContentFromArray(s.getBytes) // TODO: charset
 }
 
 case class FileContentFromFile(file: File) extends FileContent {
