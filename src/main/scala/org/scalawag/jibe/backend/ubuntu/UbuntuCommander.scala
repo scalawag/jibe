@@ -27,7 +27,7 @@ class UbuntuCommander(ssh: SshInfo, sudo: Boolean = false) extends SecureShellBa
           }
 
         case IsRemoteFileLength(file, length) =>
-          runScriptFor(Map("llen" -> length, "rpath" -> file))
+          runScriptFor(Map("length" -> length, "file" -> file))
 
         case IsRemoteFileMD5(file, md5) =>
           runScriptFor(Map("lmd5" -> md5, "rpath" -> file))
