@@ -1,9 +1,11 @@
 package org.scalawag.jibe.backend
 
 import java.io._
-import org.scalawag.jibe.FileUtils._
+
 import org.scalawag.jibe.mandate.MandateExecutionContext
 import MandateExecutionLogging._
+import org.scalawag.jibe.mandate.command.FileContent
+
 import scala.io.Source
 
 class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false) {
@@ -43,14 +45,14 @@ class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false) {
     )
   }
 
-  def scp(mcontext: MandateExecutionContext, source: File, destination: File, mode: String = "0644"): Int = {
+  def scp(mcontext: MandateExecutionContext, source: FileContent, destination: File, mode: String = "0644"): Int = {
     import scala.collection.JavaConversions._
     execInternal(
       mcontext,
       s"${ if ( sudo ) "/usr/bin/sudo " else "" }/usr/bin/scp -t $destination",
       new SequenceInputStream(Iterator(
-        new ByteArrayInputStream(s"C$mode ${source.length} ${source.getName}\n".getBytes),
-        new FileInputStream(source),
+        new ByteArrayInputStream(s"C$mode ${source.length} ${destination.getName}\n".getBytes),
+        source.openInputStream,
         new ByteArrayInputStream(Array(0.toByte))
       ))
     )

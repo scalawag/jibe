@@ -14,6 +14,7 @@ resolvers ++= Seq (
 libraryDependencies ++= Seq(
   "com.jcraft" % "jsch" % "0.1.54",
   "commons-codec" % "commons-codec" % "1.10",
+  "org.scalatra.scalate" %% "scalate-core" % "1.7.0",
   "org.scala-graph" %% "graph-core" % "1.11.2",
   "org.scala-lang" % "scala-xml" % "2.11.0-M4",
   "io.spray" %% "spray-json" % "1.3.2",

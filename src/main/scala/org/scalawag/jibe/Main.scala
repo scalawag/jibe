@@ -41,8 +41,10 @@ object Main {
       AddUsersToGroup("bedroom", "ernie", "bert"),
       CreateOrUpdateGroup(Group("bedroom", gid = Some(1064))),
       CreateOrUpdateUser(User("oscar", primaryGroup = Some("grouch"), home = Some("/tmp"), uid = Some(5005))),
-      SendLocalFile(new File("build.sbt"), new File("/tmp/blah")),
-      ExitWithArgument(34)
+      WriteRemoteFile(new File("/tmp/blah"), new File("build.sbt")),
+      WriteRemoteFileFromTemplate(new File("/tmp/hello"), new File("hello.ssp"), Map("name" -> "count"))
+//    ,
+//      ExitWithArgument(34)
     ))
 
     val mandates2 = new CheckableCompositeMandate(None, Seq(
