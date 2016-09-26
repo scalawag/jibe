@@ -8,14 +8,15 @@ import org.scalawag.jibe.mandate.Group
 
 case class DoesGroupExist(group: Group) extends BooleanCommand
 
-/** Returns true if the group specified exists on the system.  Does not indicate whether the group was already
-  * present or was just created.  group.system is ignored unless the group must be created.
+/** Returns without exception if the group specified exists on the system with the specified parameters.  Does not
+  * indicate whether the group was already present or was just created.  group.system is ignored unless the group
+  * must be created.
   */
 
 case class CreateOrUpdateGroup(group: Group) extends UnitCommand
 
-/** Returns true if the named group is not present on the system.  Does not indicate whether the group existed
-  * prior to the call.
+/** Returns without exception if the named group is not present on the system after the command is run.  Does not
+  * indicate whether the group existed prior to the call.
   */
 
 case class DeleteGroup(groupName: String) extends UnitCommand

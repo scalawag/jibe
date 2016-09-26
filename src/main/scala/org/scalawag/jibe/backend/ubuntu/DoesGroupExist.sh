@@ -1,4 +1,5 @@
 PATH=/usr/bin
+set -e
 gid=$( awk -F: '$1 == "'$group_name'" { print $3 }' /etc/group )
 if [ -z "$gid" ]; then
   echo "group $group_name does not exist"

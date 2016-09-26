@@ -1,3 +1,5 @@
+import sbt._
+
 name := "jibe"
 
 version := "1.0.0-SNAPSHOT"
@@ -25,10 +27,16 @@ libraryDependencies ++= Seq(
 libraryDependencies ++= Seq (
   "org.scalatest" %% "scalatest" % "3.0.0",
   "org.scalamock" %% "scalamock-scalatest-support" % "3.2.2"
-) map ( _ % "test" )
+) map ( _ % "test, it" )
 
 // TODO: Ideally, this should only grab the .sh files and not the .scala files
 unmanagedResourceDirectories in Compile ++= ( sourceDirectories in Compile ).value
+
+configs(IntegrationTest)
+
+Defaults.itSettings
+
+parallelExecution in IntegrationTest := false
 
 enablePlugins(JavaServerAppPackaging)
 

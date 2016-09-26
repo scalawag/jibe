@@ -2,9 +2,9 @@ package org.scalawag.jibe.backend
 
 import java.io._
 
-import org.scalawag.jibe.mandate.MandateExecutionContext
 import MandateExecutionLogging._
 import org.scalawag.jibe.mandate.command.FileContent
+import org.scalawag.timber.api.Logger
 
 import scala.io.Source
 
@@ -12,9 +12,9 @@ class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false) {
 
   // Command can include bash scripting with ';' and '&&' and can use environment variables
 
-  def exec(mcontext: MandateExecutionContext, command: String): Int =
+  def exec(log: Logger, command: String): Int =
     execInternal(
-      mcontext,
+      log,
       if ( sudo )
         s"""sudo /bin/bash <<'EOS'
            |$command
@@ -24,7 +24,7 @@ class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false) {
       null
     )
 
-  def execResource(mcontext: MandateExecutionContext, scriptPath: String, context: Map[String, Any]): Int = {
+  def execResource(log: Logger, scriptPath: String, context: Map[String, Any]): Int = {
     val scriptResource = Option(this.getClass.getResourceAsStream(scriptPath)) getOrElse {
       throw new RuntimeException(s"unable to load script resource from classpath: $scriptPath")
     }
@@ -39,16 +39,16 @@ class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false) {
         contextLines ++ scriptLines
 
     execInternal(
-      mcontext,
+      log,
       fullScript.mkString(endl),
       null
     )
   }
 
-  def scp(mcontext: MandateExecutionContext, source: FileContent, destination: File, mode: String = "0644"): Int = {
+  def scp(log: Logger, source: FileContent, destination: File, mode: String = "0644"): Int = {
     import scala.collection.JavaConversions._
     execInternal(
-      mcontext,
+      log,
       s"${ if ( sudo ) "/usr/bin/sudo " else "" }/usr/bin/scp -t $destination",
       new SequenceInputStream(Iterator(
         new ByteArrayInputStream(s"C$mode ${source.length} ${destination.getName}\n".getBytes),
@@ -58,16 +58,16 @@ class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false) {
     )
   }
 
-  private[this] def execInternal(mcontext: MandateExecutionContext, command: String, stdin: InputStream): Int = {
+  private[this] def execInternal(log: Logger, command: String, stdin: InputStream): Int = {
     // Log here so that it appears even when something prevents the connection.
-    mcontext.log.debug(CommandContent)(command)
+    log.debug(CommandContent)(command)
 
     Sessions.withChannel(ssh) { c =>
       c.setInputStream(stdin)
 
       // JSch will close these for us.
-      c.setOutputStream(new OutputStreamToLogger(mcontext.log.info(CommandOutput)(_)))
-      c.setErrStream(new OutputStreamToLogger(mcontext.log.error(CommandOutput)(_)))
+      c.setOutputStream(new OutputStreamToLogger(log.info(CommandOutput)(_)))
+      c.setErrStream(new OutputStreamToLogger(log.error(CommandOutput)(_)))
 
       c.setCommand(command)
       c.connect()

@@ -15,7 +15,7 @@ class UbuntuCommander(ssh: SshInfo, sudo: Boolean = false) extends SecureShellBa
     import context.resultsDir
 
     def runScriptFor(args: Map[String, Any]): A = process(command) {
-      execResource(context, command.getClass.getSimpleName + ".sh", args)
+      execResource(context.log, command.getClass.getSimpleName + ".sh", args)
     }
 
     try {
@@ -23,7 +23,7 @@ class UbuntuCommander(ssh: SshInfo, sudo: Boolean = false) extends SecureShellBa
 
         case WriteRemoteFile(remotePath, content) =>
           process(command) {
-            scp(context, content, remotePath)
+            scp(context.log, content, remotePath)
           }
 
         case IsRemoteFileLength(file, length) =>
