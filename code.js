@@ -87,4 +87,10 @@ $(function() {
 
   var shuttered = $("body").find("[shuttered='true']");
   shuttered.css("display","none");
+
+  // syntax highlighting for command script content
+  $("body").find("div.command div.content div.line").each(function() {
+    alert(this);
+    hljs.highlightBlock(this);
+  });
 });
