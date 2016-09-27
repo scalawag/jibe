@@ -7,9 +7,10 @@ import spray.json._
 import FileUtils._
 import org.scalawag.jibe.mandate.MandateResults
 import org.scalawag.jibe.backend.JsonFormat._
+
 import scala.io.Source
 import scala.util.Try
-import scala.xml.NodeSeq
+import scala.xml.{NodeSeq, Text}
 
 object Reporter {
   private val dirFilter = new FileFilter {
@@ -148,6 +149,11 @@ object Reporter {
                       <div class="line" shutter-control={sid}>Command: {cmd.name.text}</div> <!-- TODO: timestamp -->
                     </div>
                     <div class="section content" shutter={sid} shuttered="true">
+                      <div class="line-numbers">
+                        {
+                          1.to(cmd.content.length).map( n => <div class="line-number">{n}:</div> )
+                        }
+                      </div>
                       {
                         cmd.content map { cc =>
                           import cc._

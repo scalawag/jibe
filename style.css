@@ -133,12 +133,16 @@ div.log {
   overflow: auto;
 }
 
-div.log div.line {
+div.log div.line, div.log div.line-number {
   font-family: monospace;
   white-space: pre;
   padding-left: .5em;
   padding-top: .1em;
   padding-bottom: .1em;
+}
+
+div.log div.line-numbers {
+  float: left;
 }
 
 div.log div.collapser {
