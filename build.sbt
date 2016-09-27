@@ -26,7 +26,7 @@ libraryDependencies ++= Seq(
 
 libraryDependencies ++= Seq (
   "org.scalatest" %% "scalatest" % "3.0.0",
-  "org.scalamock" %% "scalamock-scalatest-support" % "3.2.2"
+  "org.scalamock" %% "scalamock-scalatest-support" % "3.3.0"
 ) map ( _ % "test, it" )
 
 // TODO: Ideally, this should only grab the .sh files and not the .scala files
