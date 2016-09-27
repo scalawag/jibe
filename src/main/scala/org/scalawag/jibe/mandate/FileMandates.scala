@@ -2,12 +2,11 @@ package org.scalawag.jibe.mandate
 
 import java.io._
 
-import org.apache.commons.codec.digest.DigestUtils
 import org.fusesource.scalate._
 import org.scalawag.jibe.backend.FileResource
 import org.scalawag.jibe.mandate.command._
 
-abstract class WriteRemoteFileBase(remotePath: File) extends CheckableMandate {
+abstract class WriteRemoteFileBase(val remotePath: File) extends CheckableMandate {
   override def consequences = Iterable(FileResource(remotePath.getAbsolutePath))
 
   protected def doesRemoteFileAlreadyContain(content: FileContent)(implicit context: MandateExecutionContext): Boolean = {
@@ -18,15 +17,7 @@ abstract class WriteRemoteFileBase(remotePath: File) extends CheckableMandate {
     if (runCommand("isRemoteFileRightLength", IsRemoteFileLength(remotePath, content.length))) {
       log.debug("remote file exists and has the correct length, calculating checksum")
 
-      val fis = content.openInputStream
-      val localMd5 =
-        try {
-          DigestUtils.md5Hex(fis).toLowerCase
-        } finally {
-          fis.close()
-        }
-
-      val answer = runCommand("isRemoteFileRightChecksum", IsRemoteFileMD5(remotePath, localMd5))
+      val answer = runCommand("isRemoteFileRightChecksum", IsRemoteFileMD5(remotePath, content.md5))
       log.debug(s"checksum is ${ if ( answer ) "" else "not " }correct")
       answer
 
@@ -41,7 +32,7 @@ abstract class WriteRemoteFileBase(remotePath: File) extends CheckableMandate {
   }
 }
 
-case class WriteRemoteFile(remotePath: File, content: FileContent) extends WriteRemoteFileBase(remotePath) {
+case class WriteRemoteFile(override val remotePath: File, content: FileContent) extends WriteRemoteFileBase(remotePath) {
   override val description = Some(s"write remote file: $content -> $remotePath")
 
   override def isActionCompleted(implicit context: MandateExecutionContext): Boolean =
@@ -51,7 +42,7 @@ case class WriteRemoteFile(remotePath: File, content: FileContent) extends Write
     writeRemoteFile(content)
 }
 
-case class WriteRemoteFileFromTemplate(remotePath: File, template: FileContent, values: Map[String, Any])
+case class WriteRemoteFileFromTemplate(override val remotePath: File, template: FileContent, values: Map[String, Any])
   extends WriteRemoteFileBase(remotePath)
 {
   override val description = Some(s"write remote file with template: $template -> $remotePath")
@@ -95,7 +86,7 @@ case class WriteRemoteFileFromTemplate(remotePath: File, template: FileContent, 
       case FileContentFromArray(a) =>
 
         val engine = new TemplateEngine
-        val output = engine.layout(TemplateSource.fromText("internal.ssp", new String(a)), values) // TODO: charset?
+        val output = engine.layout(TemplateSource.fromText("internal.ssp", new String(a.toArray)), values) // TODO: charset?
 
         context.log.debug(s"content is this:\n$output")
 

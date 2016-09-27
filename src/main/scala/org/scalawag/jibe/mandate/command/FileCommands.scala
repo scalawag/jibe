@@ -1,6 +1,9 @@
 package org.scalawag.jibe.mandate.command
 
 import java.io.{ByteArrayInputStream, File, FileInputStream, InputStream}
+import java.util
+
+import org.apache.commons.codec.digest.DigestUtils
 
 /** Returns true if the remote file exists and has the specified length in bytes.  Returns false otherwise. */
 
@@ -18,6 +21,14 @@ trait FileContent {
   // must be closed by caller
   def openInputStream: InputStream
   def length: Long
+  lazy val md5 = {
+    val fis = openInputStream
+    try {
+      DigestUtils.md5Hex(fis).toLowerCase
+    } finally {
+      fis.close()
+    }
+  }
 }
 
 object FileContent {
@@ -32,8 +43,8 @@ case class FileContentFromFile(file: File) extends FileContent {
   override val toString = s"file($file)"
 }
 
-case class FileContentFromArray(bytes: Array[Byte]) extends FileContent {
-  override def openInputStream = new ByteArrayInputStream(bytes)
+case class FileContentFromArray(bytes: Seq[Byte]) extends FileContent {
+  override def openInputStream = new ByteArrayInputStream(bytes.toArray)
   override def length = bytes.length
   override val toString = s"array(${bytes.length} bytes)"
 }
