@@ -48,7 +48,7 @@ class UbuntuCommander(ssh: SshInfo, sudo: Boolean = false) extends SecureShellBa
           runScriptFor(caseClassToContext("user", user))
 
         case DeleteUser(userName) =>
-          runScriptFor(Map("user" -> userName))
+          runScriptFor(Map("userName" -> userName))
 
         // Note, these are all the same!!!
         case IsUserInAllGroups(user, groups) =>

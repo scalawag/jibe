@@ -1,0 +1,32 @@
+package org.scalawag.jibe.backend.ubuntu
+
+import org.scalatest.{BeforeAndAfter, FunSpec, Matchers}
+import org.scalawag.jibe.mandate.command.{CreateOrUpdateUser, DeleteUser, DoesUserExist}
+import org.scalawag.jibe.mandate.{Group, User}
+
+// These tests take advantage of the DoesUserExist and CreateOrUpdateUser commands, whose tests should not depend on
+// DeleteUser. It is assumed that the these other commands work properly during these tests, as they are tested
+// independently.
+
+class DeleteUserTest extends FunSpec with Matchers with VagrantTest {
+  val userA = "userA"
+
+  it("should delete the user, if it exists") {
+    commander.execute(CreateOrUpdateUser(userA))
+    commander.execute(DoesUserExist(userA)) shouldBe true
+
+    commander.execute(DeleteUser(userA))
+
+    commander.execute(DoesUserExist(userA)) shouldBe false
+  }
+
+  it("should silently do nothing if the user does not exist") {
+    commander.execute(DeleteUser(userA))
+
+    commander.execute(DoesUserExist(userA)) shouldBe false
+
+    commander.execute(DeleteUser(userA))
+
+    commander.execute(DoesUserExist(userA)) shouldBe false
+  }
+}
