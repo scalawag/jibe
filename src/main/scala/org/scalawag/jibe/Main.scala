@@ -40,6 +40,7 @@ object Main {
       CreateEveryoneUser("bert"),
       AddUsersToGroup("bedroom", "ernie", "bert"),
       CreateOrUpdateGroup(Group("bedroom", gid = Some(1064))),
+      CreateOrUpdateGroup("grouch"),
       CreateOrUpdateUser(User("oscar", primaryGroup = Some("grouch"), home = Some("/tmp"), uid = Some(5005))),
       WriteRemoteFile(new File("/tmp/blah"), new File("build.sbt")),
       WriteRemoteFileFromTemplate(new File("/tmp/hello"), new File("hello.ssp"), Map("name" -> "count")),

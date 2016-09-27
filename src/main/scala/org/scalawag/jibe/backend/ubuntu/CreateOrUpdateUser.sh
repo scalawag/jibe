@@ -6,7 +6,6 @@ opts+=(${user_home:+-d "$user_home"})
 opts+=(${user_shell:+-s "$user_shell"})
 opts+=(${user_comment:+-c "$user_comment"})
 
-set -x
 useradd "${opts[@]}" ${user_system:+-r} "${user_name}"
 useradd_exit=$?
 if [ $useradd_exit -eq 9 ]; then
