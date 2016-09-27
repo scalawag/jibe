@@ -32,7 +32,7 @@ class CreateOrUpdateUserTest extends FunSpec with Matchers with BeforeAndAfter w
   it("should succeed if the user already exists as specified") {
     rootCommander.execute(CreateOrUpdateUser(user))
     commander.execute(DoesUserExist(user)) shouldBe true
-    commander.execute(CreateOrUpdateUser(user))
+    commander.execute(CreateOrUpdateUser(user)) // root not needed if no changes are found
 
     commander.execute(DoesUserExist(user)) shouldBe true
   }

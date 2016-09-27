@@ -27,7 +27,7 @@ class CreateOrUpdateGroupTest extends FunSpec with Matchers with BeforeAndAfter 
 
     rootCommander.execute(CreateOrUpdateGroup(g))
     commander.execute(DoesGroupExist(g)) shouldBe true
-    commander.execute(CreateOrUpdateGroup(g))
+    commander.execute(CreateOrUpdateGroup(g)) // root not needed if no changes are found
 
     commander.execute(DoesGroupExist(g)) shouldBe true
   }
