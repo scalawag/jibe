@@ -9,7 +9,9 @@ import org.scalawag.jibe.mandate.MandateExecutionContext
 trait VagrantTest {
   val log = IntegrationTestLogging.log
   val sshInfo = SshInfo("192.168.212.11", "vagrant", "vagrant", 22)
-  val commander = new UbuntuCommander(sshInfo, true)
-  val ssh = new SecureShellBackend(sshInfo, true)
-  implicit val context = MandateExecutionContext(commander, new File("/tmp/"), log)
+  val rootCommander = new UbuntuCommander(sshInfo, true)
+  val rootSsh = new SecureShellBackend(sshInfo, true)
+  val commander = new UbuntuCommander(sshInfo, false)
+  val ssh = new SecureShellBackend(sshInfo, false)
+  implicit val context = MandateExecutionContext(rootCommander, new File("/tmp/"), log)
 }

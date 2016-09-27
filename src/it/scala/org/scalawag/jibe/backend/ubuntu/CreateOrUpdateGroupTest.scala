@@ -11,13 +11,13 @@ class CreateOrUpdateGroupTest extends FunSpec with Matchers with BeforeAndAfter 
   val groupName = "groupB"
 
   before {
-    Some(ssh.exec(log, s"groupdel $groupName")) should contain oneOf(0, 6)
+    Some(rootSsh.exec(log, s"groupdel $groupName")) should contain oneOf(0, 6)
   }
 
   it("should create the group") {
     val g = Group(groupName)
 
-    commander.execute(CreateOrUpdateGroup(g))
+    rootCommander.execute(CreateOrUpdateGroup(g))
 
     commander.execute(DoesGroupExist(g)) shouldBe true
   }
@@ -25,7 +25,7 @@ class CreateOrUpdateGroupTest extends FunSpec with Matchers with BeforeAndAfter 
   it("should succeed if the group already exists") {
     val g = Group(groupName)
 
-    commander.execute(CreateOrUpdateGroup(g))
+    rootCommander.execute(CreateOrUpdateGroup(g))
     commander.execute(DoesGroupExist(g)) shouldBe true
     commander.execute(CreateOrUpdateGroup(g))
 
@@ -35,7 +35,7 @@ class CreateOrUpdateGroupTest extends FunSpec with Matchers with BeforeAndAfter 
   it("should use the specified GID when creating the group") {
     val g = Group(groupName, Some(4000))
 
-    commander.execute(CreateOrUpdateGroup(g))
+    rootCommander.execute(CreateOrUpdateGroup(g))
 
     commander.execute(DoesGroupExist(g)) shouldBe true
   }
@@ -44,9 +44,9 @@ class CreateOrUpdateGroupTest extends FunSpec with Matchers with BeforeAndAfter 
     val gBefore = Group(groupName, Some(4000))
     val gAfter = gBefore.copy(gid = Some(4001))
 
-    commander.execute(CreateOrUpdateGroup(gBefore))
+    rootCommander.execute(CreateOrUpdateGroup(gBefore))
 
-    commander.execute(CreateOrUpdateGroup(gAfter))
+    rootCommander.execute(CreateOrUpdateGroup(gAfter))
 
     commander.execute(DoesGroupExist(gAfter)) shouldBe true
   }
@@ -54,7 +54,7 @@ class CreateOrUpdateGroupTest extends FunSpec with Matchers with BeforeAndAfter 
   it("should ignore group.system when group.gid is specified") {
     val g = Group(groupName, Some(4000), true)
 
-    commander.execute(CreateOrUpdateGroup(g))
+    rootCommander.execute(CreateOrUpdateGroup(g))
 
     commander.execute(DoesGroupExist(g)) shouldBe true
   }
@@ -63,9 +63,9 @@ class CreateOrUpdateGroupTest extends FunSpec with Matchers with BeforeAndAfter 
     val gWithGid = Group(groupName, gid = Some(4000))
     val gWithSystem = Group(groupName, system = true)
 
-    commander.execute(CreateOrUpdateGroup(gWithGid))
+    rootCommander.execute(CreateOrUpdateGroup(gWithGid))
 
-    commander.execute(CreateOrUpdateGroup(gWithSystem))
+    rootCommander.execute(CreateOrUpdateGroup(gWithSystem))
 
     // gid should not have been changed
     commander.execute(DoesGroupExist(gWithGid)) shouldBe true
@@ -74,7 +74,7 @@ class CreateOrUpdateGroupTest extends FunSpec with Matchers with BeforeAndAfter 
   it("should heed group.system (= true) when group doesn't exist and group.gid is not specified") {
     val g = Group(groupName, system = true)
 
-    commander.execute(CreateOrUpdateGroup(g))
+    rootCommander.execute(CreateOrUpdateGroup(g))
 
     ssh.exec(log, s"test $$( getent group $groupName | cut -d: -f3 ) -lt 1000") shouldBe 0
   }
@@ -82,22 +82,26 @@ class CreateOrUpdateGroupTest extends FunSpec with Matchers with BeforeAndAfter 
   it("should heed group.system (= false) when group doesn't exist and group.gid is not specified") {
     val g = Group(groupName, system = false)
 
-    commander.execute(CreateOrUpdateGroup(g))
+    rootCommander.execute(CreateOrUpdateGroup(g))
 
-    ssh.exec(log, s"test $$( getent group $groupName | cut -d: -f3 ) -ge 1000") shouldBe 0
+    rootSsh.exec(log, s"test $$( getent group $groupName | cut -d: -f3 ) -ge 1000") shouldBe 0
   }
 
   it("should ignore group.system for existence test") {
-    ssh.exec(log, s"groupadd $groupName") shouldBe 0
+    rootSsh.exec(log, s"groupadd $groupName") shouldBe 0
 
     commander.execute(CreateOrUpdateGroup(Group(groupName, system = true)))
   }
 
   it("should throw when the group name is invalid") {
-    an [Exception] should be thrownBy commander.execute(CreateOrUpdateGroup(Group("illegal:group name")))
+    an [Exception] should be thrownBy rootCommander.execute(CreateOrUpdateGroup(Group("illegal:group name")))
   }
 
   it("should throw when the GID is invalid") {
-    an [Exception] should be thrownBy commander.execute(CreateOrUpdateGroup(Group(groupName, Some(-14))))
+    an [Exception] should be thrownBy rootCommander.execute(CreateOrUpdateGroup(Group(groupName, Some(-14))))
+  }
+
+  it("should throw when not run as root") {
+    an [Exception] should be thrownBy commander.execute(CreateOrUpdateGroup(Group(groupName)))
   }
 }

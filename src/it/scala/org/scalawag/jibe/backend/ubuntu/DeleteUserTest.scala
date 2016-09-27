@@ -12,21 +12,27 @@ class DeleteUserTest extends FunSpec with Matchers with VagrantTest {
   val userA = "userA"
 
   it("should delete the user, if it exists") {
-    commander.execute(CreateOrUpdateUser(userA))
+    rootCommander.execute(CreateOrUpdateUser(userA))
     commander.execute(DoesUserExist(userA)) shouldBe true
+
+    rootCommander.execute(DeleteUser(userA))
+
+    commander.execute(DoesUserExist(userA)) shouldBe false
+  }
+
+  it("should silently do nothing if the user does not exist") {
+    rootCommander.execute(DeleteUser(userA))
+
+    commander.execute(DoesUserExist(userA)) shouldBe false
 
     commander.execute(DeleteUser(userA))
 
     commander.execute(DoesUserExist(userA)) shouldBe false
   }
 
-  it("should silently do nothing if the user does not exist") {
-    commander.execute(DeleteUser(userA))
+  it("should fail if the user lacks permission") {
+    rootCommander.execute(CreateOrUpdateUser(userA))
 
-    commander.execute(DoesUserExist(userA)) shouldBe false
-
-    commander.execute(DeleteUser(userA))
-
-    commander.execute(DoesUserExist(userA)) shouldBe false
+    an [Exception] should be thrownBy commander.execute(DeleteUser(userA))
   }
 }
