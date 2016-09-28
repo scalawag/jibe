@@ -8,13 +8,20 @@ import org.scalawag.jibe.mandate._
 import scala.util.{Failure, Success, Try}
 
 object Executive {
-  def IS_ACTION_COMPLETED = { (a: Mandate, c: MandateExecutionContext) => a.isActionCompleted(c) }
-  def TAKE_ACTION_IF_NEEDED = { (a: Mandate, c: MandateExecutionContext) => a.takeActionIfNeeded(c) }
+  private[jibe] val IS_ACTION_COMPLETED = { (a: Mandate, c: MandateExecutionContext) => a.isActionCompleted(c) }
+  private[jibe] val TAKE_ACTION_IF_NEEDED = { (a: Mandate, c: MandateExecutionContext) => a.takeActionIfNeeded(c) }
 
-  val isActionCompleted = executeMandate(IS_ACTION_COMPLETED)_
-  val takeActionIfNeeded = executeMandate(TAKE_ACTION_IF_NEEDED)_
+  def isActionCompleted(resultsDir: File, commander: Commander, mandates: Mandate*) =
+    executeRootMandates(IS_ACTION_COMPLETED)(resultsDir, commander, mandates:_*)
+  def takeActionIfNeeded(resultsDir: File, commander: Commander, mandates: Mandate*) =
+    executeRootMandates(TAKE_ACTION_IF_NEEDED)(resultsDir, commander, mandates:_*)
 
-  def executeMandate[A](fn: (Mandate, MandateExecutionContext) => A)(resultsDir: File, commander: Commander, mandate: Mandate): A = {
+  def executeRootMandates[A](fn: (Mandate, MandateExecutionContext) => A)(resultsDir: File, commander: Commander, mandates: Mandate*): A =
+    // Create an unnamed CompositeMandate to contain all of the mandates passed in.  This will act as the proxy for
+    // the target, in terms of outcome, timestamps, etc.
+    Executive.executeMandate(fn)(resultsDir / commander.toString, commander, new CompositeMandate(None, mandates))
+
+  private[jibe] def executeMandate[A](fn: (Mandate, MandateExecutionContext) => A)(resultsDir: File, commander: Commander, mandate: Mandate): A = {
 
     val mec = MandateExecutionContext(commander, resultsDir, MandateExecutionLogging.createMandateLogger(resultsDir))
 
