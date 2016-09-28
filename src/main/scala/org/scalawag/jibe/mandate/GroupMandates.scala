@@ -17,7 +17,7 @@ object Group {
   * @param group describes the group to be created.  Empty optional values are default or left unmodified.
   */
 
-case class CreateOrUpdateGroup(group: Group) extends CheckableMandate {
+case class CreateOrUpdateGroup(group: Group) extends Mandate {
   override val description = Some(s"update group: ${group.name}")
 
   override def consequences = Iterable(GroupResource(group.name))
@@ -29,7 +29,7 @@ case class CreateOrUpdateGroup(group: Group) extends CheckableMandate {
     runCommand("takeAction", command.CreateOrUpdateGroup(group))
 }
 
-case class DeleteGroup(name: String) extends CheckableMandate {
+case class DeleteGroup(name: String) extends Mandate {
   override val description = Some(s"update group: ${name}")
 
   override def isActionCompleted(implicit context: MandateExecutionContext): Boolean =

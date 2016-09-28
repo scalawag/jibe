@@ -1,6 +1,6 @@
 package org.scalawag.jibe.mandate
 
-case object NoisyMandate extends CheckableMandate {
+case object NoisyMandate extends Mandate {
   override val description = Some("Make a lot of noise.")
 
   override def isActionCompleted(implicit context: MandateExecutionContext) = {
@@ -24,7 +24,7 @@ case object NoisyMandate extends CheckableMandate {
   }
 }
 
-case class ExitWithArgument(exitCode: Int) extends CheckableMandate {
+case class ExitWithArgument(exitCode: Int) extends Mandate {
   override val description = Some(s"exit with $exitCode")
 
   override def isActionCompleted(implicit context: MandateExecutionContext) = {

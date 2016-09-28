@@ -9,14 +9,14 @@ import scala.util.{Failure, Success, Try}
 
 object Executive {
   def TAKE_ACTION = { (a: Mandate, c: MandateExecutionContext) => a.takeAction(c) }
-  def IS_ACTION_COMPLETED = { (a: CheckableMandate, c: MandateExecutionContext) => a.isActionCompleted(c) }
-  def TAKE_ACTION_IF_NEEDED = { (a: CheckableMandate, c: MandateExecutionContext) => a.takeActionIfNeeded(c) }
+  def IS_ACTION_COMPLETED = { (a: Mandate, c: MandateExecutionContext) => a.isActionCompleted(c) }
+  def TAKE_ACTION_IF_NEEDED = { (a: Mandate, c: MandateExecutionContext) => a.takeActionIfNeeded(c) }
 
   val takeAction = executeMandate(TAKE_ACTION)_
   val isActionCompleted = executeMandate(IS_ACTION_COMPLETED)_
   val takeActionIfNeeded = executeMandate(TAKE_ACTION_IF_NEEDED)_
 
-  def executeMandate[A <: Mandate, B](fn: (A, MandateExecutionContext) => B)(resultsDir: File, commander: Commander, mandate: A): B = {
+  def executeMandate[A](fn: (Mandate, MandateExecutionContext) => A)(resultsDir: File, commander: Commander, mandate: Mandate): A = {
 
     val mec = MandateExecutionContext(commander, resultsDir, MandateExecutionLogging.createMandateLogger(resultsDir))
 
@@ -37,7 +37,7 @@ object Executive {
     writeFileWithPrintWriter(resultsDir / "mandate.js") { pw =>
       import spray.json._
       import JsonFormat._
-      val results = MandateResults(mandate.description, outcome, mandate.isInstanceOf[CompositeMandateBase[_]], startTime, endTime)
+      val results = MandateResults(mandate.description, outcome, mandate.isInstanceOf[CompositeMandate], startTime, endTime)
       pw.write(results.toJson.prettyPrint)
     }
 

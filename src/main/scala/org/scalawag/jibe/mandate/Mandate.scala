@@ -20,14 +20,6 @@ trait Mandate {
   // throw -> error
   def takeAction(implicit context: MandateExecutionContext): Unit
 
-  override def toString = description.getOrElse(super.toString)
-
-  protected[this] def runCommand[A](label: String, command: Command[A])(implicit context: MandateExecutionContext) = {
-    context.commander.execute(command)
-  }
-}
-
-trait CheckableMandate extends Mandate {
   // true -> action is not needed
   // false -> action is needed
   def isActionCompleted(implicit context: MandateExecutionContext): Boolean
@@ -41,8 +33,15 @@ trait CheckableMandate extends Mandate {
       takeAction(context)
       true
     }
+
+  override def toString = description.getOrElse(super.toString)
+
+  protected[this] def runCommand[A](label: String, command: Command[A])(implicit context: MandateExecutionContext) = {
+    context.commander.execute(command)
+  }
 }
 
+// TODO: lose this pimper?  It's only here to make this seem more DSL-y and this isn't the DSL.  We don't have one yet.
 object Mandate {
   implicit class MandatePimper(mandate: Mandate) {
     def before(after: Mandate) = mandate match {

@@ -26,16 +26,16 @@ object Main {
     }
 
     def CreateEveryoneUser(name: String) =
-      new CheckableCompositeMandate(Some(s"create personal user: $name"), Seq(
+      new CompositeMandate(Some(s"create personal user: $name"), Seq(
         CreateOrUpdateUser(name),
         CreateOrUpdateGroup("everyone"),
         AddUserToGroups(name, "everyone")
       ))
 
     def AddUsersToGroup(group: String, users: String*) =
-      new CheckableCompositeMandate(Some(s"add multiple users to group $group"), users.map(AddUserToGroups(_, group)))
+      new CompositeMandate(Some(s"add multiple users to group $group"), users.map(AddUserToGroups(_, group)))
 
-    val mandates1 = new CheckableCompositeMandate(None, Seq(
+    val mandates1 = new CompositeMandate(None, Seq(
       CreateEveryoneUser("ernie"),
       CreateEveryoneUser("bert"),
       AddUsersToGroup("bedroom", "ernie", "bert"),
@@ -48,7 +48,7 @@ object Main {
       ExitWithArgument(34)
     ))
 
-    val mandates2 = new CheckableCompositeMandate(None, Seq(
+    val mandates2 = new CompositeMandate(None, Seq(
       NoisyMandate
     ))
 

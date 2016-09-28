@@ -6,7 +6,7 @@ import org.fusesource.scalate._
 import org.scalawag.jibe.backend.FileResource
 import org.scalawag.jibe.mandate.command._
 
-abstract class WriteRemoteFileBase(val remotePath: File) extends CheckableMandate {
+abstract class WriteRemoteFileBase(val remotePath: File) extends Mandate {
   override def consequences = Iterable(FileResource(remotePath.getAbsolutePath))
 
   protected def doesRemoteFileAlreadyContain(content: FileContent)(implicit context: MandateExecutionContext): Boolean = {

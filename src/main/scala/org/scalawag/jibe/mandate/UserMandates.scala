@@ -14,7 +14,7 @@ object User {
   implicit def fromString(name: String) = User(name)
 }
 
-case class CreateOrUpdateUser(user: User) extends CheckableMandate {
+case class CreateOrUpdateUser(user: User) extends Mandate {
   override val description = Some(s"update user: ${user.name}")
 
   override def prerequisites = Iterable(
@@ -32,7 +32,7 @@ case class CreateOrUpdateUser(user: User) extends CheckableMandate {
     runCommand("takeAction", command.CreateOrUpdateUser(user))
 }
 
-case class DeleteUser(userName: String) extends CheckableMandate {
+case class DeleteUser(userName: String) extends Mandate {
   override val description = Some(s"delete user: ${userName}")
 
   override def isActionCompleted(implicit context: MandateExecutionContext): Boolean =
