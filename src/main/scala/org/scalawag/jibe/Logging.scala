@@ -19,7 +19,7 @@ object Logging {
   ))
 
   val config = org.scalawag.timber.backend.dispatcher.configuration.Configuration {
-    ( level >= DEBUG ) ~> stdout
+    ( level >= DEBUG ) ~> file("target/app.log")
   }
 
   val disp = new Dispatcher(config)
