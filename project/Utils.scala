@@ -21,7 +21,7 @@ object Utils {
     def dependsOnRemote(ms: ModuleID*): Project = p.settings(libraryDependencies ++= ms)
   }
 
-  // DSL for adding source dependencies ot projects.
+  // DSL for adding source dependencies to projects.
   def dependsOnSource(dir: String): Seq[Setting[_]] = {
     import Keys._
     Seq(unmanagedSourceDirectories in Compile <<= (unmanagedSourceDirectories in Compile, baseDirectory) { (srcDirs, base) => (base / dir / "src/main/scala") +: srcDirs },
