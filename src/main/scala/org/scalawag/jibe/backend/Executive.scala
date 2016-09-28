@@ -8,11 +8,9 @@ import org.scalawag.jibe.mandate._
 import scala.util.{Failure, Success, Try}
 
 object Executive {
-  def TAKE_ACTION = { (a: Mandate, c: MandateExecutionContext) => a.takeAction(c) }
   def IS_ACTION_COMPLETED = { (a: Mandate, c: MandateExecutionContext) => a.isActionCompleted(c) }
   def TAKE_ACTION_IF_NEEDED = { (a: Mandate, c: MandateExecutionContext) => a.takeActionIfNeeded(c) }
 
-  val takeAction = executeMandate(TAKE_ACTION)_
   val isActionCompleted = executeMandate(IS_ACTION_COMPLETED)_
   val takeActionIfNeeded = executeMandate(TAKE_ACTION_IF_NEEDED)_
 

@@ -22,19 +22,21 @@ case class CreateOrUpdateGroup(group: Group) extends Mandate {
 
   override def consequences = Iterable(GroupResource(group.name))
 
-  override def isActionCompleted(implicit context: MandateExecutionContext): Boolean =
-    runCommand("isActionCompleted", command.DoesGroupExist(group))
+  override def isActionCompleted(implicit context: MandateExecutionContext) =
+    Some(runCommand(command.DoesGroupExist(group)))
 
-  override def takeAction(implicit context: MandateExecutionContext): Unit =
-    runCommand("takeAction", command.CreateOrUpdateGroup(group))
+  override def takeActionIfNeeded(implicit context: MandateExecutionContext) = ifNeeded {
+    runCommand(command.CreateOrUpdateGroup(group))
+  }
 }
 
 case class DeleteGroup(name: String) extends Mandate {
   override val description = Some(s"update group: ${name}")
 
-  override def isActionCompleted(implicit context: MandateExecutionContext): Boolean =
-    ! runCommand("isActionCompleted", command.DoesGroupExist(Group(name)))
+  override def isActionCompleted(implicit context: MandateExecutionContext) =
+    Some(! runCommand(command.DoesGroupExist(Group(name))))
 
-  override def takeAction(implicit context: MandateExecutionContext): Unit =
-    runCommand("takeAction", command.DeleteGroup(name))
+  override def takeActionIfNeeded(implicit context: MandateExecutionContext) = ifNeeded {
+    runCommand(command.DeleteGroup(name))
+  }
 }

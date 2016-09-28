@@ -19,21 +19,21 @@ trait WriteRemoteFileBaseTest extends FunSpec with Matchers with MandateTest {
       it("should short-circuit the MD5 check on different size") {
         executing(lengthTest).returns(false).once
 
-        mandate.isActionCompleted shouldBe false
+        mandate.isActionCompleted shouldBe Some(false)
       }
 
       it("should require the MD5 check on same size and then decide (true)") {
         executing(lengthTest).returns(true).once
         executing(md5Test).returns(true).once
 
-        mandate.isActionCompleted shouldBe true
+        mandate.isActionCompleted shouldBe Some(true)
       }
 
       it("should require the MD5 check on same size and then decide (false)") {
         executing(lengthTest).returns(true).once
         executing(md5Test).returns(false).once
 
-        mandate.isActionCompleted shouldBe false
+        mandate.isActionCompleted shouldBe Some(false)
       }
 
       it("should fail when the IsRemoteFileLength command throws") {
@@ -54,19 +54,21 @@ trait WriteRemoteFileBaseTest extends FunSpec with Matchers with MandateTest {
       }
     }
 
-    describe("takeAction") {
+    describe("takeActionIfNeeded") {
 
       it("should execute the WriteRemoteFile command successfully") {
+        executing(lengthTest).returns(false).once
         executing(writeCommand).once
 
-        mandate.takeAction
+        mandate.takeActionIfNeeded
       }
 
       it("should fail when the WriteRemoteFile command throws") {
+        executing(lengthTest).returns(false).once
         executing(writeCommand).throws(ex).once
 
         intercept[Exception] {
-          mandate.takeAction
+          mandate.takeActionIfNeeded
         } shouldBe ex
       }
     }

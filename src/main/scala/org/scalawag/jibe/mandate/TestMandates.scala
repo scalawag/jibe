@@ -11,10 +11,10 @@ case object NoisyMandate extends Mandate {
     log.warn("Then, there's a warning.")
     log.error("Finally, an ERROR!!!!!")
 
-    false
+    None
   }
 
-  override def takeAction(implicit context: MandateExecutionContext) = {
+  override def takeActionIfNeeded(implicit context: MandateExecutionContext) = ifNeeded {
     try {
       throw new RuntimeException("BOOM")
     } catch {
@@ -29,14 +29,14 @@ case class ExitWithArgument(exitCode: Int) extends Mandate {
 
   override def isActionCompleted(implicit context: MandateExecutionContext) = {
     import context._
-    val ec = runCommand("isActionCompleted", command.ExitWithArgument(exitCode))
+    val ec = runCommand(command.ExitWithArgument(exitCode))
     log.info(s"command exited with exit code: $ec")
-    false
+    Some(false)
   }
 
-  override def takeAction(implicit context: MandateExecutionContext) = {
+  override def takeActionIfNeeded(implicit context: MandateExecutionContext) = ifNeeded {
     import context._
-    val ec = runCommand("isActionCompleted", command.ExitWithArgument(-exitCode))
+    val ec = runCommand(command.ExitWithArgument(-exitCode))
     log.warn(s"command exited with exit code: $ec")
   }
 }

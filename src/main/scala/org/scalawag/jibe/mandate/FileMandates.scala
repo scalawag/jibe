@@ -14,10 +14,10 @@ abstract class WriteRemoteFileBase(val remotePath: File) extends Mandate {
 
     // Do a quick check that it exists and is the right length before proceeding.
 
-    if (runCommand("isRemoteFileRightLength", IsRemoteFileLength(remotePath, content.length))) {
+    if (runCommand(IsRemoteFileLength(remotePath, content.length))) {
       log.debug("remote file exists and has the correct length, calculating checksum")
 
-      val answer = runCommand("isRemoteFileRightChecksum", IsRemoteFileMD5(remotePath, content.md5))
+      val answer = runCommand(IsRemoteFileMD5(remotePath, content.md5))
       log.debug(s"checksum is ${ if ( answer ) "" else "not " }correct")
       answer
 
@@ -28,18 +28,19 @@ abstract class WriteRemoteFileBase(val remotePath: File) extends Mandate {
   }
 
   protected def writeRemoteFile(content: FileContent)(implicit context: MandateExecutionContext): Unit = {
-    runCommand("takeAction", command.WriteRemoteFile(remotePath, content))
+    runCommand(command.WriteRemoteFile(remotePath, content))
   }
 }
 
 case class WriteRemoteFile(override val remotePath: File, content: FileContent) extends WriteRemoteFileBase(remotePath) {
   override val description = Some(s"write remote file: $content -> $remotePath")
 
-  override def isActionCompleted(implicit context: MandateExecutionContext): Boolean =
-    doesRemoteFileAlreadyContain(content)
+  override def isActionCompleted(implicit context: MandateExecutionContext) =
+    Some(doesRemoteFileAlreadyContain(content))
 
-  override def takeAction(implicit context: MandateExecutionContext): Unit =
+  override def takeActionIfNeeded(implicit context: MandateExecutionContext) = ifNeeded {
     writeRemoteFile(content)
+  }
 }
 
 case class WriteRemoteFileFromTemplate(override val remotePath: File, template: FileContent, values: Map[String, Any])
@@ -103,33 +104,20 @@ case class WriteRemoteFileFromTemplate(override val remotePath: File, template: 
         // noop
     }
 
-  override def isActionCompleted(implicit context: MandateExecutionContext): Boolean = {
+  override def isActionCompleted(implicit context: MandateExecutionContext) = {
     val content = produceContent
     try {
-      doesRemoteFileAlreadyContain(content)
+      Some(doesRemoteFileAlreadyContain(content))
     } finally {
       cleanup(content)
     }
   }
 
-  override def takeAction(implicit context: MandateExecutionContext): Unit = {
+  override def takeActionIfNeeded(implicit context: MandateExecutionContext) = {
     val content = produceContent
     try {
-      writeRemoteFile(content)
-    } finally {
-      cleanup(content)
-    }
-  }
-
-  // Override so that the content is produced only once...
-  override def takeActionIfNeeded(implicit context: MandateExecutionContext): Boolean = {
-    val content = produceContent
-    try {
-      if ( doesRemoteFileAlreadyContain(content) ) {
-        false
-      } else {
+      ifNeeded {
         writeRemoteFile(content)
-        true
       }
     } finally {
       cleanup(content)

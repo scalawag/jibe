@@ -16,27 +16,27 @@ trait Mandate {
   def prerequisites: Iterable[Resource] = Iterable.empty
   def consequences: Iterable[Resource] = Iterable.empty
 
-  // Unit -> action was successfully taken
-  // throw -> error
-  def takeAction(implicit context: MandateExecutionContext): Unit
-
-  // true -> action is not needed
-  // false -> action is needed
-  def isActionCompleted(implicit context: MandateExecutionContext): Boolean
+  // Some(true) -> action is not needed
+  // Some(false) -> action is needed
+  // None -> can't tell if action is needed
+  def isActionCompleted(implicit context: MandateExecutionContext): Option[Boolean] = None
 
   // false -> action was unneeded
   // true -> action was needed and completed
-  def takeActionIfNeeded(implicit context: MandateExecutionContext): Boolean =
-    if ( isActionCompleted(context) ) {
-      false
-    } else {
-      takeAction(context)
-      true
+  def takeActionIfNeeded(implicit context: MandateExecutionContext): Boolean
+
+  protected[this] def ifNeeded(fn: => Unit)(implicit context: MandateExecutionContext): Boolean =
+    isActionCompleted match {
+      case Some(true) =>
+        false
+      case _ =>
+        fn
+        true
     }
 
   override def toString = description.getOrElse(super.toString)
 
-  protected[this] def runCommand[A](label: String, command: Command[A])(implicit context: MandateExecutionContext) = {
+  protected[this] def runCommand[A](command: Command[A])(implicit context: MandateExecutionContext) = {
     context.commander.execute(command)
   }
 }
