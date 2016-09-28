@@ -157,7 +157,7 @@ object Reporter {
                       {
                         cmd.content map { cc =>
                           import cc._
-                          <div class="line" title={timestamp}>{text}</div>
+                          <div class="line" title={timestamp}>{text}&nbsp;</div>
                         }
                       }
                     </div>
@@ -165,7 +165,7 @@ object Reporter {
                       {
                         cmd.output map { co =>
                           import co._
-                          <div class={"line " + level} title={timestamp}>{text}</div>
+                          <div class={"line " + level} title={timestamp}>{text}&nbsp;</div>
                         }
                       }
                     </div>
