@@ -13,8 +13,10 @@ demonstrate what that looks like in the "results" output.
 1. `git clone git@github.com:scalawag/jibe.git`
 2. `cd jibe`
 3. `vagrant up`
-4. `sbt run`
-5. `open open results/latest/html/index.html`
+4. `sbt core/run`
+5. `open results/latest/html/index.html`
+
+To run the unit tests: `sbt it:test`
 
 ## TODOs
 
