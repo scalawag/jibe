@@ -44,6 +44,7 @@ object Main {
       WriteRemoteFile(new File("/tmp/blah"), new File("build.sbt")),
       WriteRemoteFileFromTemplate(new File("/tmp/hello"), new File("hello.ssp"), Map("name" -> "count")),
       WriteRemoteFileFromTemplate(new File("/tmp/another"), "<%@ val noun: String %>\ntesting the ${noun}", Map("noun" -> "waters")),
+      InstallPackage(Package("vim")),
       ExitWithArgument(34)
     ))
 

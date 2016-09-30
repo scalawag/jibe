@@ -3,6 +3,8 @@ package org.scalawag.jibe.mandate
 import java.io.File
 
 import org.scalawag.jibe.mandate.command.CommandArgument._
+import scala.concurrent.duration._
+
 
 package object command {
   implicit val StringToValue = new ToValue[String, StringValue] {
@@ -34,4 +36,9 @@ package object command {
   implicit val FileToValue = new ToValue[File, StringValue] {
     override def toValue(a: File): Option[StringValue] = Some(StringValue(a.getPath))
   }
+
+  implicit val DurationToValue = new ToValue[Duration, LongValue] {
+    override def toValue(d: Duration) = Some(new LongValue(d.toMillis))
+  }
+
 }

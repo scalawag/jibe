@@ -54,6 +54,14 @@ Your vagrant machines must be running for the integration tests to work.
 sbt it:test
 ```
 
+The integration test log is in `./target/it.log`
+
+To run only one test, use test-only and the class name of the test. For example:
+
+```
+sbt it:test-only\ org.scalawag.jibe.backend.ubuntu.InstallPackageTest
+```
+
 ## TODOs
 
 ### Things to prove/demonstrate:
