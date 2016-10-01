@@ -250,9 +250,9 @@ object Reporter {
           <head>
             <meta charset="utf-8" />
             <link rel="stylesheet" href="http://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css"/>
-            <link rel="stylesheet" type="text/css" href="../../../style.css"/>
+            <link rel="stylesheet" type="text/css" href="/static/style.css"/>
             <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.1/jquery.min.js"></script>
-            <script type="text/javascript" src="../../../code.js"></script>
+            <script type="text/javascript" src="/static/code.js"></script>
             <link rel="stylesheet" href="http://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.7.0/styles/github.min.css"/>
             <script src="http://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.7.0/highlight.min.js"></script>
           </head>

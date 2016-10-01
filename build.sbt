@@ -30,6 +30,19 @@ lazy val core = project
     unmanagedResourceDirectories in Compile ++= ( sourceDirectories in Compile ).value
   )
   .dependsOnRemote(
-    jsch, commonsCodec, scalateCore, scalaGraphCore, scalaXml, sprayJson, timber.backend, timber.slf4j
+    akkaActor,
+    commonsCodec,
+    jsch,
+    scalaGraphCore,
+    scalateCore,
+    scalaXml,
+    spray.can,
+    spray.json,
+    spray.routing,
+    timber.backend,
+    timber.slf4j
   )
-  .dependsOnRemote(Seq(scalatest, scalamock) map ( _ % "test, it" ):_*)
+  .dependsOnRemote(Seq(
+    scalatest,
+    scalamock
+  ) map ( _ % "test, it" ):_*)
