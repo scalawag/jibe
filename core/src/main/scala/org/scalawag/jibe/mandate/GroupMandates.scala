@@ -1,6 +1,6 @@
 package org.scalawag.jibe.mandate
 
-import org.scalawag.jibe.backend.GroupResource
+import org.scalawag.jibe.backend.{GroupResource, MandateExecutionContext, MandateHelpers, StatelessMandate}
 
 case class Group(name: String,
                  gid: Option[Int] = None,
@@ -17,26 +17,24 @@ object Group {
   * @param group describes the group to be created.  Empty optional values are default or left unmodified.
   */
 
-case class CreateOrUpdateGroup(group: Group) extends Mandate {
+case class CreateOrUpdateGroup(group: Group) extends StatelessMandate with MandateHelpers {
   override val description = Some(s"update group: ${group.name}")
 
   override def consequences = Iterable(GroupResource(group.name))
 
   override def isActionCompleted(implicit context: MandateExecutionContext) =
-    Some(runCommand(command.DoesGroupExist(group)))
+    runCommand(command.DoesGroupExist(group))
 
-  override def takeActionIfNeeded(implicit context: MandateExecutionContext) = ifNeeded {
+  override def takeAction(implicit context: MandateExecutionContext) =
     runCommand(command.CreateOrUpdateGroup(group))
-  }
 }
 
-case class DeleteGroup(name: String) extends Mandate {
+case class DeleteGroup(name: String) extends StatelessMandate with MandateHelpers {
   override val description = Some(s"update group: ${name}")
 
   override def isActionCompleted(implicit context: MandateExecutionContext) =
-    Some(! runCommand(command.DoesGroupExist(Group(name))))
+    ! runCommand(command.DoesGroupExist(Group(name)))
 
-  override def takeActionIfNeeded(implicit context: MandateExecutionContext) = ifNeeded {
+  override def takeAction(implicit context: MandateExecutionContext) =
     runCommand(command.DeleteGroup(name))
-  }
 }
