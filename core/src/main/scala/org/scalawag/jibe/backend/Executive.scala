@@ -1,30 +1,35 @@
 package org.scalawag.jibe.backend
 
-import java.io.File
+import java.io.{PrintWriter, File}
 
-import org.scalawag.jibe.FileUtils
+import org.scalawag.jibe.{Logging, AbortException, FileUtils}
 import org.scalawag.jibe.report.ExecutiveStatus
+import scala.annotation.tailrec
 import scalax.collection.Graph
-import scalax.collection.edge.LDiEdge
+import scalax.collection.GraphEdge.DiEdge
 
 object Executive {
   def execute(rootJob: MandateJob): Unit = {
 
     sealed trait Vertex
+    sealed trait CycleParticipant extends Vertex
     case class ParentStart(parent: ParentMandateJob) extends Vertex {
-      override val toString = s"IN-${parent.mandate.description.getOrElse(parent.mandate.toString)}"
+      override val toString = s"IN-${parent.mandate.description.getOrElse(parent.hashCode)}"
     }
     case class ParentEnd(parent: ParentMandateJob) extends Vertex {
-      override val toString = s"OUT-${parent.mandate.description.getOrElse(parent.mandate.toString)}"
+      override val toString = s"OUT-${parent.mandate.description.getOrElse(parent.hashCode)}"
     }
-    case class ResourceVertex(resource: Resource) extends Vertex {
+    case class ResourceVertex(resource: Resource) extends CycleParticipant {
       override val toString = resource.toString
     }
-    case class Leaf(job: LeafMandateJob) extends Vertex {
+    case class Leaf(job: LeafMandateJob) extends CycleParticipant {
       override val toString = job.mandate.description.getOrElse("?")
     }
+    case class SequenceOrdering(mandate: MandateSequence, index: Int) extends CycleParticipant {
+      override val toString = s"${mandate.hashCode} - $index"
+    }
 
-    var graph = Graph.empty[Vertex, LDiEdge]
+    var graph = Graph.empty[Vertex, DiEdge]
 
     def addToGraph(job: MandateJob): (Vertex, Vertex) =
       job match {
@@ -34,11 +39,11 @@ object Executive {
 
           // Add resource edges
           j.mandate.consequences foreach { r =>
-            graph += LDiEdge(vertex, ResourceVertex(r))("")
+            graph += DiEdge(vertex, ResourceVertex(r))
           }
 
           j.mandate.prerequisites foreach { r =>
-            graph += LDiEdge(ResourceVertex(r), vertex)("")
+            graph += DiEdge(ResourceVertex(r), vertex)
           }
 
           (vertex, vertex)
@@ -53,35 +58,37 @@ object Executive {
           j.mandate match {
             case seq: MandateSequence =>
               // Sequence all children
-              vertices.sliding(2) foreach { case childPairInAndOut =>
+              vertices.sliding(2).zipWithIndex foreach { case (childPairInAndOut, n) =>
                 val lout = childPairInAndOut(0)._2
+                val seqVertex = SequenceOrdering(seq, n)
                 val rin = childPairInAndOut(1)._1
-                graph += LDiEdge(lout, rin)("")
+                graph += DiEdge(lout, seqVertex)
+                graph += DiEdge(seqVertex, rin)
               }
 
               // Connect the in and out
-              graph += LDiEdge(in, vertices.head._1)("")
-              graph += LDiEdge(vertices.last._2, out)("")
+              graph += DiEdge(in, vertices.head._1)
+              graph += DiEdge(vertices.last._2, out)
 
             case set: MandateSet =>
               // Connect in and out to each child in parallel
               vertices foreach { case childInAndOut =>
-                graph += LDiEdge(in, childInAndOut._1)("")
-                graph += LDiEdge(childInAndOut._2, out)("")
+                graph += DiEdge(in, childInAndOut._1)
+                graph += DiEdge(childInAndOut._2, out)
               }
 
             case set: CommanderMandate => // TODO: figure out how to generalize this to another type
               // Connect in and out to each child in parallel
               vertices foreach { case childInAndOut =>
-                graph += LDiEdge(in, childInAndOut._1)("")
-                graph += LDiEdge(childInAndOut._2, out)("")
+                graph += DiEdge(in, childInAndOut._1)
+                graph += DiEdge(childInAndOut._2, out)
               }
 
             case set: RunMandate => // TODO: figure out how to generalize this to another type
               // Connect in and out to each child in parallel
               vertices foreach { case childInAndOut =>
-                graph += LDiEdge(in, childInAndOut._1)("")
-                graph += LDiEdge(childInAndOut._2, out)("")
+                graph += DiEdge(in, childInAndOut._1)
+                graph += DiEdge(childInAndOut._2, out)
               }
           }
 
@@ -94,23 +101,20 @@ object Executive {
     {
       import scalax.collection.io.dot._
 
-      val rg =
-      DotRootGraph(
+      val rg = DotRootGraph(
         directed  = true,
         id        = Some(Id("MyDot")),
         attrList = Seq(DotAttr(Id("rankdir"), Id("LR")))
       )
 
-      def edgeTransformer(innerEdge: Graph[Vertex,LDiEdge]#EdgeT):
+      def edgeTransformer(innerEdge: Graph[Vertex,DiEdge]#EdgeT):
       Option[(DotGraph,DotEdgeStmt)] = innerEdge.edge match {
-        case LDiEdge(source, target, label) => label match {
-          case label: String =>
+        case DiEdge(source, target) =>
             Some((rg,
               DotEdgeStmt(
                 NodeId(source.toString),
-                NodeId(target.toString),
-                if (label.nonEmpty) List(DotAttr(Id("label"), Id(label.toString))) else                Nil)))
-        }}
+                NodeId(target.toString))))
+      }
 
       val dot = graph.toDot(rg, edgeTransformer _)
 
@@ -128,12 +132,56 @@ object Executive {
     }
 
     // Fail now if there are cycles in the graph
+    // Breaks up a cycle into segments that each start and end with a Leaf (mandate) and have no mandates between them.
+
+    @tailrec
+    def segmentize(todo: Iterable[CycleParticipant], answer: List[List[CycleParticipant]] = Nil, first: Option[CycleParticipant] = None): List[List[CycleParticipant]] =
+      todo match {
+        case Nil =>
+          answer
+        case (head: Leaf) :: Nil =>
+          answer
+        case (head: Leaf) :: tail =>
+          // head is a leaf, look for the next one
+          val nonLeaves = tail.takeWhile(! _.isInstanceOf[Leaf])
+          val newTail = tail.dropWhile(! _.isInstanceOf[Leaf])
+          segmentize(newTail, answer ++ List( ( head :: nonLeaves ) ++ List(newTail.headOption.getOrElse(first.get)) ), Some(first.getOrElse(head)) )
+        case head :: tail =>
+          // head is not a leaf... rotate until it is
+          segmentize(tail ++ List(head), answer, first)
+      }
 
     graph.findCycle foreach { cycle =>
-      System.err.println(s"Detected cycle within mandate graph:")
-      cycle foreach { t =>
-        System.err.println(s"  $t")
+      System.err.println(s"ERROR: Detected cycle within mandate graph:")
+      val interesting = cycle.nodes.toOuterNodes.collect { case cp: CycleParticipant => cp }.toList
+      val segments = segmentize(interesting)
+
+      Logging.log.error { pw: PrintWriter =>
+        pw.println("Raw cycle output:")
+        pw.println("-" * 80)
+        interesting.foreach(pw.println)
+        pw.println("-" * 80)
+        pw.println("Cycle segments:")
+        pw.println("-" * 80)
+        segments foreach { s =>
+          s.foreach(pw.println)
+          pw.println("-" * 80)
+        }
       }
+
+      segments foreach { s =>
+        val from = s.head
+        val to = s.last
+        val through = s(1)
+
+        (through: @unchecked) match {
+          case SequenceOrdering(mandate, _) =>
+            System.err.println(s"""  "$from" must precede "$to" due to a mandate sequence${mandate.description.map(d => s""" named "$d"""").getOrElse("")}""")
+          case ResourceVertex(resource) =>
+            System.err.println(s"""  "$from" must precede "$to" due to $resource""")
+        }
+      }
+      throw new AbortException
     }
 
     // Actually perform the mandate executions. Ensure that we visit all leaves only after their predecessors have
@@ -157,7 +205,5 @@ object Executive {
         case _ => // Ignore everything but leaf jobs
       }
     }
-
-//    graph.topologicalSort.right.get.toOuter.collect { case Leaf(x) => x }.collect { case l: LeafMandateJob => l }.toIterable
   }
 }
