@@ -88,7 +88,7 @@ trait LeafMandateJob extends MandateJob {
 
     status.mutate(_.copy(startTime = Some(System.currentTimeMillis)))
 
-    val mec = MandateExecutionContext(commander, dir, log)
+    val mec = MandateExecutionContext(commander, log)
 
     val outcome: ExecutiveStatus.Value =
       try {

@@ -12,5 +12,5 @@ trait VagrantTest {
   val rootSsh = new SecureShellBackend(sshInfo, true)
   val commander = new UbuntuCommander(sshInfo, false)
   val ssh = new SecureShellBackend(sshInfo, false)
-  implicit val context = MandateExecutionContext(rootCommander, new File("/tmp/"), log)
+  implicit val context = MandateExecutionContext(rootCommander, log)
 }
