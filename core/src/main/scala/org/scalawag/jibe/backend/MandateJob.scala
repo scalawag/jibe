@@ -51,6 +51,8 @@ trait LeafMandateJob extends MandateJob {
   protected[this] def isActionCompleted(implicit context: MandateExecutionContext): Option[Boolean]
   protected[this] def takeActionIfNeeded(implicit context: MandateExecutionContext): ExecutiveStatus.Value
 
+  private[backend] val log = MandateExecutionLogging.createMandateLogger(dir)
+
   protected[this] def logCall[A](label: String)(fn: => A)(implicit context: MandateExecutionContext): A = {
     context.log.info(MandateExecutionLogging.FunctionStart)(label)
     val answer = fn
@@ -86,7 +88,7 @@ trait LeafMandateJob extends MandateJob {
 
     status.mutate(_.copy(startTime = Some(System.currentTimeMillis)))
 
-    val mec = MandateExecutionContext(commander, dir, MandateExecutionLogging.createMandateLogger(dir))
+    val mec = MandateExecutionContext(commander, dir, log)
 
     val outcome: ExecutiveStatus.Value =
       try {

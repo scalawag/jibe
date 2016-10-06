@@ -1,11 +1,6 @@
 PATH=/usr/sbin
 opts="${group_gid:+-g $group_gid}"
 
-if [ "$group_name" == "bedroom" ]; then
-  echo "failing by design" >&2
-  exit 14
-fi
-
 groupadd $opts ${group_system:+-r} "${group_name}"
 groupadd_exit=$?
 if [ $groupadd_exit -eq 9 ]; then

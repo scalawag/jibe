@@ -151,9 +151,8 @@ object Executive {
           segmentize(tail ++ List(head), answer, first)
       }
 
-    graph.findCycle foreach { cycle =>
-      System.err.println(s"ERROR: Detected cycle within mandate graph:")
-      val interesting = cycle.nodes.toOuterNodes.collect { case cp: CycleParticipant => cp }.toList
+    def pathToSegments(nodes: Traversable[g.NodeT]) = {
+      val interesting = nodes.toOuterNodes.collect { case cp: CycleParticipant => cp }.toList
       val segments = segmentize(interesting)
 
       Logging.log.error { pw: PrintWriter =>
@@ -169,18 +168,27 @@ object Executive {
         }
       }
 
-      segments foreach { s =>
+      segments
+    }
+
+    def segmentsToLines(segments: List[List[CycleParticipant]]): List[String] =
+      segments map { s =>
         val from = s.head
         val to = s.last
         val through = s(1)
 
         (through: @unchecked) match {
           case SequenceOrdering(mandate, _) =>
-            System.err.println(s"""  "$from" must precede "$to" due to a mandate sequence${mandate.description.map(d => s""" named "$d"""").getOrElse("")}""")
+            s"""  "$from" must precede "$to" due to a mandate sequence${mandate.description.map(d => s""" named "$d"""").getOrElse("")}"""
           case ResourceVertex(resource) =>
-            System.err.println(s"""  "$from" must precede "$to" due to $resource""")
+            s"""  "$from" must precede "$to" due to $resource"""
         }
       }
+
+    g.findCycle foreach { cycle =>
+      System.err.println(s"ERROR: Detected cycle within mandate graph:")
+      val segments = pathToSegments(cycle.nodes)
+      segmentsToLines(segments).foreach(System.err.println)
       throw new AbortException
     }
 
@@ -195,9 +203,19 @@ object Executive {
             val status = job.go()
             if ( status.executiveStatus == Some(ExecutiveStatus.FAILURE) ) {
               // process all successor jobs to the failed job
-              g.outerNodeTraverser(node).foreach {
-                case l: Leaf if l != leaf => l.job.executiveStatus = ExecutiveStatus.BLOCKED // abort leaf jobs
-                case x => // ignore everything but leaf jobs
+              g.innerNodeTraverser(node).foreach { case successor =>
+                successor.value match {
+                  case l: Leaf if l != leaf => // abort leaf jobs
+                    // mark it as blocked
+                    l.job.executiveStatus = ExecutiveStatus.BLOCKED
+                    // log (in that job) why it was blocked
+                    l.job.log.info { pw: PrintWriter =>
+                      pw.println(s"""blocked by failure of mandate "${job.mandate.description.getOrElse(job.mandate.toString)}"""")
+                      val segments = pathToSegments(( node shortestPathTo successor ).get.nodes)
+                      segmentsToLines(segments) foreach pw.println
+                    }
+                  case x => // ignore everything but leaf jobs
+                }
               }
             }
           }
