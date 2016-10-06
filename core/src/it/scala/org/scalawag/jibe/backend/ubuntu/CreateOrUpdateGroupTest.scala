@@ -1,8 +1,7 @@
 package org.scalawag.jibe.backend.ubuntu
 
 import org.scalatest.{BeforeAndAfter, FunSpec, Matchers}
-import org.scalawag.jibe.mandate.command.{CreateOrUpdateGroup, DoesGroupExist}
-import org.scalawag.jibe.mandate.Group
+import org.scalawag.jibe.mandate.command.{Group, CreateOrUpdateGroup, DoesGroupExist}
 
 // These tests take advantage of the DoesGroupExist command, whose tests should not depend on CreateOrUpdateGroup.
 // It is assumed that the DoesGroupExist command works properly during these tests.

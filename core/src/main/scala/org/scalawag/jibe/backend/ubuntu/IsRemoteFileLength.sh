@@ -1,7 +1,7 @@
 PATH=/usr/bin
 set -e
-actual=$( stat -c %s "$file" )
-if [ $actual -ne $length ]; then
-  echo "$actual != $length"
+actualLength=$( stat -c %s "$file" )
+if [ $actualLength -ne $length ]; then
+  echo "$actualLength != $length"
   exit 1
 fi

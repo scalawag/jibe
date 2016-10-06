@@ -1,2 +1,2 @@
 PATH=/usr/sbin:/usr/bin
-usermod -G $( echo $targetGroups | tr ' ' ',' ) -a $targetUser
+usermod -G $( IFS=, ; echo "${groups[*]}" ) -a $user

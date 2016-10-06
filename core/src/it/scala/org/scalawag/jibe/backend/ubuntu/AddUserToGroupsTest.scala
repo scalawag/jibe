@@ -1,7 +1,6 @@
 package org.scalawag.jibe.backend.ubuntu
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSpec, Matchers}
-import org.scalawag.jibe.mandate.{Group, User}
 import org.scalawag.jibe.mandate.command._
 
 class AddUserToGroupsTest extends FunSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with VagrantTest {
@@ -38,7 +37,7 @@ class AddUserToGroupsTest extends FunSpec with Matchers with BeforeAndAfter with
     commander.execute(IsUserInAllGroups(userA, Set(groupA, groupB))) shouldBe true
   }
 
-  it("should add user to some new groups while leaving old ones") {
+  it("should add user to some new groups while leaving old ones alone") {
     rootCommander.execute(AddUserToGroups(userA, Set(groupA)))
     commander.execute(IsUserInAllGroups(userA, Set(groupA, groupB))) shouldBe false
 

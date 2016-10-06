@@ -24,19 +24,17 @@ class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false) {
       null
     )
 
-  def execResource(log: Logger, scriptPath: String, context: Map[String, Any]): Int = {
+  def execResource(log: Logger, scriptPath: String, prepend: Iterable[String]): Int = {
     val scriptResource = Option(this.getClass.getResourceAsStream(scriptPath)) getOrElse {
       throw new RuntimeException(s"unable to load script resource from classpath: $scriptPath")
     }
     val scriptLines = Source.fromInputStream(scriptResource).getLines
 
-    val contextLines = context map { case (k,v) => s"""$k="$v"""" }
-
     val fullScript =
       if ( sudo )
-        Iterable("sudo /bin/bash <<'EOS'") ++ contextLines ++ scriptLines ++ Iterable("EOS")
+        Iterable("sudo /bin/bash <<'EOS'") ++ prepend ++ scriptLines ++ Iterable("EOS")
       else
-        contextLines ++ scriptLines
+        prepend ++ scriptLines
 
     execInternal(
       log,

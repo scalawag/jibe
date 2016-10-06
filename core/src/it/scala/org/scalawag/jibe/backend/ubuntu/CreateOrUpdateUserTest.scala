@@ -1,8 +1,7 @@
 package org.scalawag.jibe.backend.ubuntu
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSpec, Matchers}
-import org.scalawag.jibe.mandate.{Group, User}
-import org.scalawag.jibe.mandate.command.{CreateOrUpdateGroup, CreateOrUpdateUser, DoesUserExist}
+import org.scalawag.jibe.mandate.command._
 
 // These tests take advantage of the DoesUserExist command, whose tests should not depend on CreateOrUpdateUser.
 // It is assumed that the DoesUserExist command works properly during these tests.

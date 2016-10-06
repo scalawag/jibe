@@ -1,8 +1,7 @@
 package org.scalawag.jibe.backend.ubuntu
 
 import org.scalatest.{BeforeAndAfter, FunSpec, Matchers}
-import org.scalawag.jibe.mandate.Group
-import org.scalawag.jibe.mandate.command.DoesGroupExist
+import org.scalawag.jibe.mandate.command.{Group, DoesGroupExist}
 
 class DoesGroupExistTest extends FunSpec with Matchers with BeforeAndAfter with VagrantTest {
   val groupName = "groupA"
