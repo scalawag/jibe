@@ -1,7 +1,10 @@
 package org.scalawag.jibe.backend
 
 import java.io.{File, PrintWriter}
+import java.util.concurrent.atomic.AtomicReference
+import java.util.function.UnaryOperator
 
+import org.apache.commons.codec.digest.DigestUtils
 import org.scalawag.jibe.FileUtils._
 import org.scalawag.jibe.mandate._
 import org.scalawag.jibe.report.{ExecutiveStatus, MandateStatus}
@@ -9,41 +12,58 @@ import org.scalawag.jibe.report.JsonFormat._
 
 private[backend]
 trait MandateJob {
+  val id: String
   val dir: File
   val mandate: Mandate
   val takeAction: Boolean
 
   protected[this] var status: FileBackedStatus[MandateStatus, _] =
-    new FileBackedStatus(dir / "mandate.js", MandateStatus(mandate.toString, mandate.description, mandate.isInstanceOf[CompositeMandateBase], takeAction))
+    new FileBackedStatus(dir / "mandate.js",
+      MandateStatus(
+        id,
+        mandate.toString,
+        DigestUtils.md5Hex(mandate.toString).toLowerCase,
+        mandate.description,
+        mandate.isInstanceOf[CompositeMandateBase],
+        takeAction
+      )
+    )
 
   def executiveStatus = status.get.executiveStatus
   def executiveStatus_=(es: ExecutiveStatus.Value) = {
-    status.mutate(_.copy(executiveStatus = Some(es)))
-    fireCompleted()
+    status.mutate(_.copy(executiveStatus = es))
   }
 
-  // Not thread-safe but I know that this is only going to be called by one mandate right now (the parent).
+  // This basically maintains its own list of listeners and filters out messages that don't include executiveStatus
+  // changes.  It also adds the context of the mandate job that fired the event.
 
-  private[this] var completedListeners = Seq.empty[(MandateJob, MandateStatus) => Unit]
+  private type StatusChangeListener = (MandateJob, MandateStatus, MandateStatus) => Unit
 
-  def addCompletedListener(listener: (MandateJob, MandateStatus) => Unit) = {
-    completedListeners = completedListeners :+ listener
-  }
+  private[this] var statusChangeListeners = new AtomicReference[Seq[StatusChangeListener]](Seq.empty)
 
-  protected[this] def fireCompleted(): Unit = {
-    completedListeners.foreach(_.apply(this, status.get))
-  }
+  def addChangeListener(listener: StatusChangeListener) =
+    statusChangeListeners.getAndUpdate(new UnaryOperator[Seq[StatusChangeListener]] {
+      override def apply(t: Seq[StatusChangeListener]) = t :+ listener
+    })
+
+  private[this] def fireStatusChange(oldStatus: MandateStatus, newStatus: MandateStatus): Unit =
+    if ( oldStatus.executiveStatus != newStatus.executiveStatus ) {
+      statusChangeListeners.get.foreach(_.apply(this, oldStatus, newStatus))
+    }
+
+  // register for lower-level change events
+  status.addChangeListener(fireStatusChange _)
 }
 
 object MandateJob {
-  def apply(dir: File, mandate: Mandate, commander: Commander, takeAction: Boolean) = mandate match {
-    case m: StatelessMandate     => new StatelessMandateJob(dir, m, commander, takeAction)
-    case m: StatefulMandate[_]   => new StatefulMandateJob(dir, m, commander, takeAction)
-    case m: CompositeMandateBase => new CompositeMandateJob(dir, m, commander, takeAction)
+  def apply(id: String, dir: File, mandate: Mandate, commander: Commander, takeAction: Boolean) = mandate match {
+    case m: StatelessMandate     => new StatelessMandateJob(id, dir, m, commander, takeAction)
+    case m: StatefulMandate[_]   => new StatefulMandateJob(id, dir, m, commander, takeAction)
+    case m: CompositeMandateBase => new CompositeMandateJob(id, dir, m, commander, takeAction)
   }
 
   def apply(dir: File, mandate: RunMandate, takeAction: Boolean) =
-    new RunMandateJob(dir, mandate, takeAction)
+    new RunMandateJob("m0", dir, mandate, takeAction)
 }
 
 private[backend]
@@ -84,10 +104,10 @@ trait LeafMandateJob extends MandateJob {
     }
 
   def go() = {
-    if ( status.get.startTime.isDefined )
+    if ( status.get.executiveStatus != ExecutiveStatus.PENDING )
       throw new IllegalStateException(s"MandateJob $this has already been started")
 
-    status.mutate(_.copy(startTime = Some(System.currentTimeMillis)))
+    status.mutate(_.copy(startTime = Some(System.currentTimeMillis), executiveStatus = ExecutiveStatus.RUNNING))
 
     val mec = MandateExecutionContext(commander, log)
 
@@ -108,15 +128,15 @@ trait LeafMandateJob extends MandateJob {
           ExecutiveStatus.FAILURE
       }
 
-    status.mutate(_.copy(endTime = Some(System.currentTimeMillis), executiveStatus = Some(outcome)))
-    fireCompleted()
+    status.mutate(_.copy(endTime = Some(System.currentTimeMillis), executiveStatus = outcome))
 
     status.get
   }
 }
 
 private[backend]
-case class StatelessMandateJob(override val dir: File,
+case class StatelessMandateJob(override val id: String,
+                               override val dir: File,
                                override val mandate: StatelessMandate,
                                override val commander: Commander,
                                override val takeAction: Boolean)
@@ -133,7 +153,8 @@ case class StatelessMandateJob(override val dir: File,
 }
 
 private[backend]
-case class StatefulMandateJob[A](override val dir: File,
+case class StatefulMandateJob[A](override val id: String,
+                                 override val dir: File,
                                  override val mandate: StatefulMandate[A],
                                  override val commander: Commander,
                                  override val takeAction: Boolean)
@@ -165,89 +186,118 @@ private[backend]
 abstract class ParentMandateJob(val children: Seq[MandateJob]) extends MandateJob {
   private[this] var childrenReported = 0
 
-  children.foreach(_.addCompletedListener(this.childCompleted))
+  // initialize the child job state counts to all PENDING
+  status.mutate(_.copy(childStatusCounts = Some(Map(ExecutiveStatus.PENDING -> children.size))))
 
-  private[this] def childCompleted(child: MandateJob, report: MandateStatus) = synchronized {
-    childrenReported += 1
-    val allChildrenReported = childrenReported == children.size
+  children.foreach(_.addChangeListener(this.childStatusChanged))
 
+  // Keep track of the earliest start time and latest end time in case the events arrive from our children out of order.
+  private[this] var earliestChildStartTime: Option[Long] = None
+  private[this] var latestChildEndTime: Option[Long] = None
+
+  private[this] def earliest(times: Option[Long]*) = times.flatten match {
+    case seq if seq.isEmpty => None
+    case seq => Some(seq.min)
+  }
+
+  private[this] def latest(times: Option[Long]*) = times.flatten match {
+    case seq if seq.isEmpty => None
+    case seq => Some(seq.max)
+  }
+
+  private[this] def childStatusChanged(child: MandateJob,
+                                       oldStatus: MandateStatus,
+                                       newStatus: MandateStatus) = synchronized {
     status.mutate { r =>
+      val oldChildStatus = oldStatus.executiveStatus
+      val newChildStatus = newStatus.executiveStatus
 
       // Incorporate this child's report into our report.
 
-      def incrementValue[A](map: Option[Map[A, Int]], key: Option[A]) =
-        key match {
-          case None =>
-            map
+      // Update child status counts...
 
-          case Some(k) =>
-            val m = map.getOrElse(Map.empty)
-            Some(m + ( k -> ( m.getOrElse(k, 0) + 1 ) ))
-        }
-
-      val newChildStatusCounts =
-        incrementValue(r.childStatusCounts, report.executiveStatus)
-
-      // Possibly update our outcome, if we can.
-
-      // See if we have enough information to assign an outcome yet.  Several of the child outcomes can determine the
-      // parent's outcome (e.g., any child failure means the parent failed).  This is true for everything except
-      // UNNEEDED in the order of precedence below.  If all we get back is UNNEEDED. we need to wait until every
-      // child has reported back to make a determination.
-
-      val newExecutiveStatus = {
-        import ExecutiveStatus._
-        if ( report.executiveStatus.contains(FAILURE) || status.get.executiveStatus.contains(FAILURE) )
-          Some(FAILURE)
-        else if ( report.executiveStatus.contains(BLOCKED) || status.get.executiveStatus.contains(BLOCKED) )
-          Some(BLOCKED)
-        else if ( report.executiveStatus.contains(SUCCESS) || status.get.executiveStatus.contains(SUCCESS) )
-          Some(SUCCESS)
-        else if ( allChildrenReported )
-          Some(UNNEEDED)
-        else
-          None
+      val newChildStatusCounts = {
+        val m = r.childStatusCounts.get
+        m + ( oldChildStatus -> ( m(oldChildStatus) - 1 ) ) + ( newChildStatus -> ( m.getOrElse(newChildStatus, 0) + 1 ) )
       }
 
+      // Assign a parent status based on the childrens' statuses. The precendence of child statuses wrt parent
+      // status is defined below.  This means that if a parent's childrens' statuses include two different items in
+      // the precedence list, the one earlier in the list is the status of the parent.  That means that every child
+      // has to have the last status in the list for the parent to have that status and only one child must have the
+      // first status for the parent to have that status.
+      //
+      // The only two which don't really need to be ordered are SUCCESS and NEEDED which are mutally exclusive,
+      // depending on the mode we're in (isActionNeeded or takeAction). They're listed in arbitrary order.
+
+      import ExecutiveStatus._
+
+      val precedence = Seq(FAILURE, BLOCKED, RUNNING, PENDING, SUCCESS, NEEDED, UNNEEDED)
+
+      val newExecutiveStatus = precedence.find( s => newChildStatusCounts.get(s).exists(_ > 0) ).get
+
+      // Update our earliest child start and latest child end times so that we'll have them when we need them.
+      this.earliestChildStartTime = earliest(this.earliestChildStartTime, newStatus.startTime)
+      this.latestChildEndTime = latest(this.latestChildEndTime, newStatus.endTime)
+
+      // Set the parent start time to the child start time if this event makes it so that no children are pending.
+      // TODO: can we count on always receiving the earliest start time first?
+      val newStartTime =
+        if ( newChildStatusCounts.getOrElse(PENDING, 0) < children.size )
+          this.earliestChildStartTime
+        else
+          None
+
+      // Set the parent end time to the child end time if all children are now done running.
+      // TODO: can we count on always receiving the latest start time last?
+
       val newEndTime =
-        if ( allChildrenReported )
-          Some(System.currentTimeMillis)
+        if ( ( newChildStatusCounts.getOrElse(RUNNING, 0) + newChildStatusCounts.getOrElse(PENDING, 0) ) == 0 )
+          this.latestChildEndTime
         else
           None
 
       // There are still outstanding children.  Set anything we already know about from the above logic.
 
       r.copy(
+        startTime = newStartTime,
         endTime = newEndTime,
         executiveStatus = newExecutiveStatus,
-        childStatusCounts = newChildStatusCounts
+        childStatusCounts = Some(newChildStatusCounts)
       )
     }
+  }
+}
 
-    if ( allChildrenReported )
-      fireCompleted()
+object ParentMandateJob {
+  def zipWithIndexAndDirName[A <: Mandate](ms: Iterable[A]): Iterable[(A, Int, String)] = {
+    val width = math.log10(ms.size).toInt + 1
+    ms.zipWithIndex map { case (m, n) =>
+      val subdir = s"%0${width}d".format(n) + m.description.map(s => "_" + s.replaceAll("\\W+", "_")).getOrElse("")
+      (m, n, subdir)
+    }
   }
 }
 
 private[backend]
-class CompositeMandateJob(override val dir: File,
+class CompositeMandateJob(override val id: String,
+                          override val dir: File,
                           override val mandate: CompositeMandateBase,
                           val commander: Commander,
                           override val takeAction: Boolean)
   extends ParentMandateJob({
-    val width = math.log10(mandate.mandates.length).toInt + 1
-    mandate.mandates.zipWithIndex map { case (m, n) =>
-      val subdir = s"%0${width}d".format(n + 1) + m.description.map(s => "_" + s.replaceAll("\\W+", "_")).getOrElse("")
-      MandateJob(dir / subdir, m, commander, takeAction)
+    ParentMandateJob.zipWithIndexAndDirName(mandate.mandates).toSeq map { case (m, n, d) =>
+      MandateJob(s"${id}_${n}", dir / d, m, commander, takeAction)
     }
   })
 
 private[backend]
-class RunMandateJob(override val dir: File,
+class RunMandateJob(override val id: String,
+                    override val dir: File,
                     override val mandate: RunMandate,
                     override val takeAction: Boolean)
   extends ParentMandateJob(
-    mandate.mandates map { case m =>
-      MandateJob(dir / m.commander.toString, m, m.commander, takeAction)
+    ParentMandateJob.zipWithIndexAndDirName(mandate.mandates).toSeq map { case (m, n, d) =>
+      MandateJob(s"${id}_${n}", dir / d, m, m.commander, takeAction)
     }
   )

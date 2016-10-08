@@ -124,11 +124,11 @@ object Reporter {
     val ms = Source.fromFile(dir / "mandate.js").mkString.parseJson.convertTo[MandateStatus]
 
     val (outcomeClass, outcomeIcon, toolTip) = ms.executiveStatus match {
-      case None => ("waiting", "fa fa-clock-o", "awaiting execution")
-      case Some(ExecutiveStatus.UNNEEDED) => ("skipped", "fa fa-times", "execution was unnecessary")
-      case Some(ExecutiveStatus.FAILURE) => ("failure", "fa fa-exclamation", "execution failed")
-      case Some(ExecutiveStatus.SUCCESS) => ("success", "fa fa-check", "execution succeeded")
-      case Some(ExecutiveStatus.BLOCKED) => ("blocked", "fa fa-ban", "execution was blocked by other failed mandates")
+      case ExecutiveStatus.PENDING  => ("waiting", "fa fa-clock-o", "awaiting execution")
+      case ExecutiveStatus.UNNEEDED => ("skipped", "fa fa-times", "execution was unnecessary")
+      case ExecutiveStatus.FAILURE  => ("failure", "fa fa-exclamation", "execution failed")
+      case ExecutiveStatus.SUCCESS  => ("success", "fa fa-check", "execution succeeded")
+      case ExecutiveStatus.BLOCKED  => ("blocked", "fa fa-ban", "execution was blocked by other failed mandates")
     }
 
     val logFile = dir / "log"

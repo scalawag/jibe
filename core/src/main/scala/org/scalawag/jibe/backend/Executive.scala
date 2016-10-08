@@ -11,26 +11,25 @@ import scalax.collection.Graph
 import scalax.collection.GraphEdge.DiEdge
 
 object Executive {
-  def execute(rootJob: MandateJob): Unit = {
+  private[this] sealed trait Vertex
+  private[this] sealed trait CycleParticipant extends Vertex
+  private[this] case class ParentStart(parent: ParentMandateJob) extends Vertex {
+    override val toString = s"IN-${parent.mandate.description.getOrElse(parent.hashCode)}"
+  }
+  private[this] case class ParentEnd(parent: ParentMandateJob) extends Vertex {
+    override val toString = s"OUT-${parent.mandate.description.getOrElse(parent.hashCode)}"
+  }
+  private[this] case class ResourceVertex(resource: Resource) extends CycleParticipant {
+    override val toString = resource.toString
+  }
+  private[this] case class Leaf(job: LeafMandateJob) extends CycleParticipant {
+    override val toString = job.mandate.description.getOrElse("?")
+  }
+  private[this] case class SequenceOrdering(mandate: MandateSequence, index: Int) extends CycleParticipant {
+    override val toString = s"${mandate.hashCode} - $index"
+  }
 
-    sealed trait Vertex
-    sealed trait CycleParticipant extends Vertex
-    case class ParentStart(parent: ParentMandateJob) extends Vertex {
-      override val toString = s"IN-${parent.mandate.description.getOrElse(parent.hashCode)}"
-    }
-    case class ParentEnd(parent: ParentMandateJob) extends Vertex {
-      override val toString = s"OUT-${parent.mandate.description.getOrElse(parent.hashCode)}"
-    }
-    case class ResourceVertex(resource: Resource) extends CycleParticipant {
-      override val toString = resource.toString
-    }
-    case class Leaf(job: LeafMandateJob) extends CycleParticipant {
-      override val toString = job.mandate.description.getOrElse("?")
-    }
-    case class SequenceOrdering(mandate: MandateSequence, index: Int) extends CycleParticipant {
-      override val toString = s"${mandate.hashCode} - $index"
-    }
-
+  private[this] def buildGraph(rootJob: MandateJob) = {
     var graph = Graph.empty[Vertex, DiEdge]
 
     def addToGraph(job: MandateJob): (Vertex, Vertex) =
@@ -98,34 +97,41 @@ object Executive {
           (in, out)
       }
 
-    val (startVertex, _) = addToGraph(rootJob)
+    addToGraph(rootJob)
 
-    {
-      import scalax.collection.io.dot._
+    graph
+  }
 
-      val rg = DotRootGraph(
-        directed  = true,
-        id        = Some(Id("MyDot")),
-        attrList = Seq(DotAttr(Id("rankdir"), Id("LR")))
-      )
+  def dumpGraph(rootJob: MandateJob, out: File): Unit = {
+    import scalax.collection.io.dot._
 
-      def edgeTransformer(innerEdge: Graph[Vertex,DiEdge]#EdgeT):
-      Option[(DotGraph,DotEdgeStmt)] = innerEdge.edge match {
-        case DiEdge(source, target) =>
-            Some((rg,
-              DotEdgeStmt(
-                NodeId(source.toString),
-                NodeId(target.toString))))
-      }
+    val graph = buildGraph(rootJob)
 
-      val dot = graph.toDot(rg, edgeTransformer _)
+    val rg = DotRootGraph(
+      directed  = true,
+      id        = Some(Id("MyDot")),
+      attrList = Seq(DotAttr(Id("rankdir"), Id("LR")))
+    )
 
-      FileUtils.writeFileWithPrintWriter(new File("./graph.dot")) { pw => pw.println(dot) }
+    def edgeTransformer(innerEdge: Graph[Vertex,DiEdge]#EdgeT):
+    Option[(DotGraph,DotEdgeStmt)] = innerEdge.edge match {
+      case DiEdge(source, target) =>
+        Some((rg,
+          DotEdgeStmt(
+            NodeId(source.toString),
+            NodeId(target.toString))))
     }
 
+    val dot = graph.toDot(rg, edgeTransformer _)
+
+    FileUtils.writeFileWithPrintWriter(out) { pw => pw.print(dot) }
+  }
+
+  def execute(rootJob: MandateJob): Unit = {
+    val graph = buildGraph(rootJob)
+
     // Issue warnings about unmanaged resources.
-    val g = graph
-    g.nodes foreach { n: g.NodeT =>
+    graph.nodes foreach { n: graph.NodeT =>
       n.value match {
         case ResourceVertex(r) if n.inDegree == 0 =>
           println(s"WARNING: resource $r is required but not produced by any mandates")
@@ -153,7 +159,7 @@ object Executive {
           segmentize(tail ++ List(head), answer, first)
       }
 
-    def pathToSegments(nodes: Traversable[g.NodeT]) = {
+    def pathToSegments(nodes: Traversable[graph.NodeT]) = {
       val interesting = nodes.toOuterNodes.collect { case cp: CycleParticipant => cp }.toList
       val segments = segmentize(interesting)
 
@@ -187,7 +193,7 @@ object Executive {
         }
       }
 
-    g.findCycle foreach { cycle =>
+    graph.findCycle foreach { cycle =>
       System.err.println(s"ERROR: Detected cycle within mandate graph:")
       val segments = pathToSegments(cycle.nodes)
       segmentsToLines(segments).foreach(System.err.println)
@@ -197,15 +203,15 @@ object Executive {
     // Actually perform the mandate executions. Ensure that we visit all leaves only after their predecessors have
     // been visited by performing a topological sort.
 
-    g.topologicalSort.right.get foreach { case node =>
+    graph.topologicalSort.right.get foreach { case node =>
       node.value match {
         case leaf: Leaf =>
           val job = leaf.job
-          if ( job.executiveStatus.isEmpty ) {
+          if ( job.executiveStatus == ExecutiveStatus.PENDING ) {
             val status = job.go()
             if ( status.executiveStatus == Some(ExecutiveStatus.FAILURE) ) {
               // process all successor jobs to the failed job
-              g.innerNodeTraverser(node).foreach { case successor =>
+              graph.innerNodeTraverser(node).foreach { case successor =>
                 successor.value match {
                   case l: Leaf if l != leaf => // abort leaf jobs
                     // mark it as blocked

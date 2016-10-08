@@ -9,7 +9,7 @@ import scala.reflect.ClassTag
 import scala.reflect.runtime.universe._
 import scala.reflect.runtime.currentMirror
 
-class UbuntuCommander(ssh: SshInfo, sudo: Boolean = false) extends SecureShellBackend(ssh, sudo) with Commander {
+case class UbuntuCommander(ssh: SshInfo, sudo: Boolean = false) extends SecureShellBackend(ssh, sudo) with Commander {
 
   override def execute[A](command: Command[A])(implicit context: MandateExecutionContext): A = {
 

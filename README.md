@@ -28,7 +28,7 @@ sbt "core/run-main org.scalawag.jibe.Main"
 
 ```
 sbt "core/run-main org.scalawag.jibe.report.ReportServer"
-open http://localhost:8080/results/latest/index.html
+open http://localhost:8080/
 ```
 
 The first command is a long-running process, so you may need to use

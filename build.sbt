@@ -9,6 +9,15 @@ val commonSettings = Seq(
   version := "1.0.0-SNAPSHOT",
   organization := "org.scalawag",
   scalaVersion := "2.11.8",
+  scalacOptions ++= Seq(
+    "-unchecked",
+    "-deprecation",
+    "-feature",
+    "-language:implicitConversions",
+    "-language:postfixOps",
+    "-language:existentials",
+    "-target:jvm-1.6"
+  ),
   parallelExecution in IntegrationTest := false,
   resolvers ++= Seq (
     "JAnalyse Repository" at "http://www.janalyse.fr/repository/",
@@ -30,10 +39,12 @@ lazy val core = project
     unmanagedResourceDirectories in Compile ++= ( sourceDirectories in Compile ).value
   )
   .dependsOnRemote(
-    akkaActor,
+    akka.actor,
+    akka.slf4j,
     commonsCodec,
+    graph.core,
+    graph.dot,
     jsch,
-    scalaGraphCore,
     scalateCore,
     scalaXml,
     spray.can,

@@ -1,7 +1,8 @@
 package org.scalawag.jibe
 
 import java.io.{File, PrintWriter}
-import java.util.TimeZone
+import java.text.SimpleDateFormat
+import java.util.{Date, TimeZone}
 
 import FileUtils._
 import org.scalawag.jibe.backend.ubuntu.UbuntuCommander
@@ -9,6 +10,8 @@ import org.scalawag.jibe.backend._
 import org.scalawag.jibe.mandate._
 import org.scalawag.timber.backend.receiver.formatter.timestamp.ISO8601TimestampFormatter
 import Logging._
+import org.scalawag.jibe.report.Model.Run
+
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
@@ -75,22 +78,32 @@ object Main {
     ))
 
     try {
-      val date = ISO8601TimestampFormatter(TimeZone.getTimeZone("UTC")).format(System.currentTimeMillis)
+      val now = System.currentTimeMillis
+      val df = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS-'UTC'")
+      val dateString = df.format(now)
 
-      val runMandate = RunMandate(date, Seq(
-        CommanderMandate(commanders(0), mandates1)//,
-//        CommanderMandate(commanders(1), mandates2),
+      val runMandate = RunMandate(dateString, Seq(
+        CommanderMandate(commanders(0), mandates1),
+        CommanderMandate(commanders(1), mandates2)
+//        ,
 //        CommanderMandate(commanders(2), mandates1)
 //        CommanderMandate(commanders(1), mandates4)
       ))
 
-      val runDir = new File("results") / date
+      val runDir = new File("results") / dateString
 
-      val job = MandateJob(runDir / "raw", runMandate, true)
+
+      // Mark this run directory's metadata (including schema version for backward compatibility)
+
+      writeFileWithPrintWriter(runDir / "run.js") { pw =>
+        pw.println(Run(1, new Date(now)).toJson.prettyPrint)
+      }
+
+      val job = MandateJob(runDir, runMandate, true)
 
       Executive.execute(job)
 
-      Reporter.generate(runDir)
+//      Reporter.generate(runDir)
 
     } catch {
       case ex: AbortException => // System.exit(1) - bad within sbt

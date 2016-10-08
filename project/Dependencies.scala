@@ -1,4 +1,3 @@
-import sbt.Keys._
 import sbt._
 
 object Dependencies {
@@ -7,9 +6,18 @@ object Dependencies {
   val jsch = "com.jcraft" % "jsch" % "0.1.54"
   val commonsCodec = "commons-codec" % "commons-codec" % "1.10"
   val scalateCore = "org.scalatra.scalate" %% "scalate-core" % "1.7.0"
-  val scalaGraphCore = "org.scala-graph" %% "graph-core" % "1.11.2"
   val scalaXml = "org.scala-lang" % "scala-xml" % "2.11.0-M4"
-  val akkaActor = "com.typesafe.akka" %% "akka-actor" % "2.3.15"
+
+  object graph {
+    val core = "org.scala-graph" %% "graph-core" % "1.11.2"
+    val dot = "com.assembla.scala-incubator" %% "graph-dot" % "1.11.0"
+  }
+
+  object akka {
+    val version = "2.3.15"
+    val actor = "com.typesafe.akka" %% "akka-actor" % version
+    val slf4j = "com.typesafe.akka" %% "akka-slf4j" % version
+  }
 
   object spray {
     val version = "1.3.3"
