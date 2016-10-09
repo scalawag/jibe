@@ -3,7 +3,8 @@ package org.scalawag.jibe.backend.ubuntu
 import java.io.File
 
 import org.scalawag.jibe.IntegrationTestLogging
-import org.scalawag.jibe.backend.{MandateExecutionContext, SecureShellBackend, SshInfo}
+import org.scalawag.jibe.backend.{SecureShellBackend, SshInfo}
+import org.scalawag.jibe.mandate.MandateExecutionContext
 
 trait VagrantTest {
   val log = IntegrationTestLogging.log

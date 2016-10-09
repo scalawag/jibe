@@ -1,9 +1,11 @@
 package org.scalawag.jibe.backend
 
-import java.io.{PrintWriter, File}
+import java.io.{File, PrintWriter}
 
-import org.scalawag.jibe.{Logging, AbortException, FileUtils}
+import org.scalawag.jibe.mandate._
+import org.scalawag.jibe.{AbortException, FileUtils, Logging}
 import org.scalawag.jibe.report.ExecutiveStatus
+
 import scala.annotation.tailrec
 import scalax.collection.Graph
 import scalax.collection.GraphEdge.DiEdge

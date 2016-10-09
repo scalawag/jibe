@@ -2,6 +2,7 @@ package org.scalawag.jibe.backend.ubuntu
 
 import org.scalawag.jibe.FileUtils._
 import org.scalawag.jibe.backend._
+import org.scalawag.jibe.mandate.MandateExecutionContext
 import org.scalawag.jibe.mandate.command._
 
 import scala.reflect.ClassTag

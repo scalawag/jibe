@@ -3,6 +3,7 @@ package org.scalawag.jibe.backend
 import java.io.{File, PrintWriter}
 
 import org.scalawag.jibe.FileUtils._
+import org.scalawag.jibe.mandate._
 import org.scalawag.jibe.report.{ExecutiveStatus, MandateStatus}
 import org.scalawag.jibe.report.JsonFormat._
 

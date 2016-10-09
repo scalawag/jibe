@@ -1,7 +1,5 @@
 package org.scalawag.jibe.mandate
 
-import org.scalawag.jibe.backend.{GroupResource, MandateExecutionContext, MandateHelpers, StatelessMandate}
-
 case class Group(name: String,
                  gid: Option[Int] = None,
                  system: Boolean = false)

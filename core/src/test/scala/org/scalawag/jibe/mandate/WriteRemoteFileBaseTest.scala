@@ -1,7 +1,7 @@
 package org.scalawag.jibe.mandate
 /*
 import org.scalatest.{FunSpec, Matchers}
-import org.scalawag.jibe.backend.Mandate
+import org.scalawag.jibe.mandate.Mandate
 import org.scalawag.jibe.mandate.command.FileContent
 
 trait WriteRemoteFileBaseTest extends FunSpec with Matchers with MandateTest {

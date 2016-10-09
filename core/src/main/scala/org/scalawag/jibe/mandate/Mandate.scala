@@ -1,4 +1,4 @@
-package org.scalawag.jibe.backend
+package org.scalawag.jibe.mandate
 
 import org.scalawag.jibe.mandate.command.Command
 

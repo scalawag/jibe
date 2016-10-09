@@ -4,7 +4,7 @@ import java.io.File
 
 import org.scalamock.scalatest.MockFactory
 import org.scalawag.jibe.TestLogging
-import org.scalawag.jibe.backend.{Commander, MandateExecutionContext}
+import org.scalawag.jibe.backend.Commander
 
 trait MandateTest extends MockFactory {
   val log = TestLogging.log
