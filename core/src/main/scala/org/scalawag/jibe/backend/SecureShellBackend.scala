@@ -6,9 +6,10 @@ import MandateExecutionLogging._
 import org.scalawag.jibe.mandate.command.FileContent
 import org.scalawag.timber.api.Logger
 
+import scala.concurrent.duration.Duration
 import scala.io.Source
 
-class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false) {
+class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false, commandTimeout: Duration = Duration.Inf) {
 
   // Command can include bash scripting with ';' and '&&' and can use environment variables
 
@@ -72,9 +73,13 @@ class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false) {
       c.setCommand(command)
       c.connect()
 
-      // TODO: maybe not block here and use futures instead.
-      val expiry = System.currentTimeMillis + 10000
-      while ( !c.isClosed && System.currentTimeMillis < expiry )
+      val expiryTime =
+        if ( commandTimeout.isFinite )
+          System.currentTimeMillis + commandTimeout.toMillis
+        else
+          Long.MaxValue
+
+      while ( !c.isClosed && System.currentTimeMillis < expiryTime )
         Thread.sleep(100)
 
       c.disconnect()
