@@ -1,5 +1,5 @@
 package org.scalawag.jibe.mandate
-
+/*
 import java.io.File
 
 import org.scalamock.scalatest.MockFactory
@@ -13,3 +13,4 @@ class WriteRemoteFileFromTemplateTest extends FunSpec with WriteRemoteFileBaseTe
 
   generateTests(WriteRemoteFileFromTemplate(destination, template, args), content)
 }
+*/

@@ -14,6 +14,10 @@ div.mandate.failure > div.summary {
   background-color: #FFBABA;
 }
 
+div.mandate.blocked > div.summary {
+  background-color: #FFBABA;
+}
+
 div.mandate.running > div.summary {
   background-color: #c3e6fc;
 }
@@ -23,6 +27,7 @@ div.mandate.skipped > div.summary {
 }
 
 div.mandate.waiting > div.summary {
+  background-color: #DDDDDD;
 }
 
 div.row {
@@ -167,6 +172,10 @@ div.log div.wrn {
 
 div.log > div.err {
   color: red;
+}
+
+div.log div.fs, div.log div.fe {
+  background-color: #dddd00;
 }
 
 div.log div.section {

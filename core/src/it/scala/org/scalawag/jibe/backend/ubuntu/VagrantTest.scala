@@ -3,8 +3,7 @@ package org.scalawag.jibe.backend.ubuntu
 import java.io.File
 
 import org.scalawag.jibe.IntegrationTestLogging
-import org.scalawag.jibe.backend.{SecureShellBackend, SshInfo}
-import org.scalawag.jibe.mandate.MandateExecutionContext
+import org.scalawag.jibe.backend.{MandateExecutionContext, SecureShellBackend, SshInfo}
 
 trait VagrantTest {
   val log = IntegrationTestLogging.log
@@ -13,5 +12,5 @@ trait VagrantTest {
   val rootSsh = new SecureShellBackend(sshInfo, true)
   val commander = new UbuntuCommander(sshInfo, false)
   val ssh = new SecureShellBackend(sshInfo, false)
-  implicit val context = MandateExecutionContext(rootCommander, new File("/tmp/"), log)
+  implicit val context = MandateExecutionContext(rootCommander, log)
 }

@@ -22,6 +22,14 @@ object MandateExecutionLogging {
     override def toString = "CE"
   })
 
+  val FunctionStart = Set(new Tag {
+    override def toString = "FS"
+  })
+
+  val FunctionReturn = Set(new Tag {
+    override def toString = "FR"
+  })
+
   val ExceptionStackTrace = Set(new Tag {
     override def toString = "EE"
   })

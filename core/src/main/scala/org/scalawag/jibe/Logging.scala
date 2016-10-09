@@ -5,6 +5,7 @@ import org.scalawag.timber.api.Logger
 import org.scalawag.timber.backend.DefaultDispatcher
 import org.scalawag.timber.backend.dispatcher.Dispatcher
 import org.scalawag.timber.backend.dispatcher.configuration.dsl._
+import org.scalawag.timber.backend.receiver.Receiver
 import org.scalawag.timber.backend.receiver.formatter.ProgrammableEntryFormatter
 import org.scalawag.timber.backend.receiver.formatter.ProgrammableEntryFormatter.entry
 import org.scalawag.timber.backend.receiver.formatter.level.NameLevelFormatter
@@ -19,7 +20,9 @@ object Logging {
   ))
 
   val config = org.scalawag.timber.backend.dispatcher.configuration.Configuration {
-    ( level >= DEBUG ) ~> file("target/app.log")
+    val out = file("target/app.log")
+    Receiver.closeOnShutdown(out)
+    ( level >= DEBUG ) ~> out
   }
 
   val disp = new Dispatcher(config)

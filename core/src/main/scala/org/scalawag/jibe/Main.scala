@@ -16,6 +16,7 @@ import scala.concurrent.{Await, Future}
 object Main {
 
   def main(args: Array[String]): Unit = {
+    Logging // trigger initialization to get the logging configured
 
     val commanders = List(
       "192.168.212.11",
@@ -26,16 +27,16 @@ object Main {
     }
 
     def CreateEveryoneUser(name: String) =
-      new CompositeMandate(Some(s"create personal user: $name"), Seq(
+      new MandateSet(Some(s"create personal user: $name"), Seq(
         CreateOrUpdateUser(name),
-        CreateOrUpdateGroup("everyone"),
-        AddUserToGroups(name, "everyone")
+        AddUserToGroups(name, "everyone"),
+        CreateOrUpdateGroup("everyone")
       ))
 
     def AddUsersToGroup(group: String, users: String*) =
-      new CompositeMandate(Some(s"add multiple users to group $group"), users.map(AddUserToGroups(_, group)))
+      new MandateSequence(Some(s"add multiple users to group $group"), users.map(AddUserToGroups(_, group)))
 
-    val mandates1 = new CompositeMandate(Some("do everything"), Seq(
+    val mandates1 = new MandateSet(Some("do everything"), Seq(
       CreateEveryoneUser("ernie"),
       CreateEveryoneUser("bert"),
       AddUsersToGroup("bedroom", "ernie", "bert"),
@@ -54,8 +55,8 @@ object Main {
       val prefix = "  " * depth
 
       mandate match {
-        case cm: CompositeMandate =>
-          val desc = s"${ if ( cm.fixedOrder ) "[FIXED] " else "" }${cm.description.getOrElse("<unnamed composite>")}"
+        case cm: CompositeMandateBase =>
+          val desc = s"${cm.description.getOrElse("<unnamed composite>")}"
           pw.println(prefix + desc)
           cm.mandates.foreach(dumpMandate(pw, _, depth + 1))
         case m =>
@@ -63,31 +64,34 @@ object Main {
       }
     }
 
+    val mandates4 = new MandateSet(Some("A"), Seq(
+      ExitWithArgument(1),
+      ExitWithArgument(2),
+      new MandateSet(Some("B"), Seq(
+        ExitWithArgument(3),
+        ExitWithArgument(4)
+      )),
+      ExitWithArgument(5)
+    ))
+
     try {
-      val orderedMandate = Orderer.order(mandates1)
-
-      log.debug { pw: PrintWriter =>
-        pw.println("mandates before/after ordering:")
-        dumpMandate(pw, mandates1)
-        pw.println("=" * 120)
-        dumpMandate(pw, orderedMandate)
-      }
-
-      val mandateMap = Map(
-        commanders(0) -> orderedMandate,
-        commanders(1) -> mandates2,
-        commanders(2) -> mandates1
-      )
-
       val date = ISO8601TimestampFormatter(TimeZone.getTimeZone("UTC")).format(System.currentTimeMillis)
-      val runResultsDir = new File("results") / date
-      val futures = mandateMap map { case (commander, mandate) =>
-        Future(Executive.takeActionIfNeeded(runResultsDir / "raw", commander, mandate))
-      }
 
-      Await.ready(Future.sequence(futures), Duration.Inf) // TODO: eventually go all asynchronous?
+      val runMandate = RunMandate(date, Seq(
+        CommanderMandate(commanders(0), mandates1)//,
+//        CommanderMandate(commanders(1), mandates2),
+//        CommanderMandate(commanders(2), mandates1)
+//        CommanderMandate(commanders(1), mandates4)
+      ))
 
-      Reporter.generate(runResultsDir)
+      val runDir = new File("results") / date
+
+      val job = MandateJob(runDir / "raw", runMandate, true)
+
+      Executive.execute(job)
+
+      Reporter.generate(runDir)
+
     } catch {
       case ex: AbortException => // System.exit(1) - bad within sbt
     } finally {

@@ -1,11 +1,12 @@
 package org.scalawag.jibe.mandate
-
+/*
 import org.scalatest.{FunSpec, Matchers}
+import org.scalawag.jibe.backend.Mandate
 import org.scalawag.jibe.mandate.command.FileContent
 
 trait WriteRemoteFileBaseTest extends FunSpec with Matchers with MandateTest {
 
-  def generateTests(mandate: WriteRemoteFileBase, content: FileContent): Unit = {
+  def generateTests[A <: WriteRemoteFileBase with Mandate](mandate: A, content: FileContent): Unit = {
     val destination = mandate.remotePath
 
     val lengthTest = command.IsRemoteFileLength(destination, content.length)
@@ -19,7 +20,7 @@ trait WriteRemoteFileBaseTest extends FunSpec with Matchers with MandateTest {
       it("should short-circuit the MD5 check on different size") {
         executing(lengthTest).returns(false).once
 
-        mandate.isActionCompleted shouldBe Some(false)
+        mandate.isActionCompleted shouldBe false
       }
 
       it("should require the MD5 check on same size and then decide (true)") {
@@ -75,3 +76,4 @@ trait WriteRemoteFileBaseTest extends FunSpec with Matchers with MandateTest {
 
   }
 }
+*/
