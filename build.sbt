@@ -1,8 +1,11 @@
 import sbt._
-
+import sbt.dsl._
 import Dependencies._
-
 import Utils._
+
+lazy val Macro = config("macro")
+
+lazy val CustomCompile = config("compile") extend(Macro)
 
 val commonSettings = Seq(
   version := "1.0.0-SNAPSHOT",
@@ -15,27 +18,20 @@ val commonSettings = Seq(
   )
 )
 
-val root = project.in(file("."))
-  .doNotPublish
-  .aggregate(macros, core)
-
-lazy val macros = project
-  .settings(commonSettings)
-  .settings(
-    name := "macros"
-  )
-  .dependsOnRemote(
-    "org.scala-lang" % "scala-reflect" % "2.11.8",
-    compilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
-  )
-
 lazy val core = project
-  .configs(IntegrationTest)
+  .configs(IntegrationTest, Macro, CustomCompile)
   .enablePlugins(JavaServerAppPackaging)
   .settings(commonSettings)
   .settings(Defaults.itSettings)
   .settings(
-    name := "jibe",
+    name := "jibe-core",
+    inConfig(Macro) {
+      Defaults.compileSettings ++
+        Seq(
+          scalaSource := baseDirectory.value / "src" / "macro" / "scala",
+          classpathConfiguration := CustomCompile
+        )
+    },
     // TODO: Ideally, this should only grab the .sh files and not the .scala files
     unmanagedResourceDirectories in Compile ++= ( sourceDirectories in Compile ).value
   )
@@ -51,4 +47,3 @@ lazy val core = project
     compilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
   )
   .dependsOnRemote(Seq(scalatest, scalamock) map ( _ % "test, it" ):_*)
-  .dependsOn(macros)
