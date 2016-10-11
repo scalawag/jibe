@@ -1,21 +1,19 @@
 import sbt._
-import sbt.dsl._
 import Dependencies._
 import Utils._
 
-lazy val Macro = config("macro")
+val CustomMacro = config("macro")
 
-lazy val CustomCompile = config("compile") extend(Macro)
+val CustomCompile = config("compile") extend(CustomMacro)
 
-lazy val CustomRuntime = config("runtime") extend(CustomCompile)
+val CustomRuntime = config("runtime") extend(CustomCompile)
 
-//lazy val CustomTest = config("test") extend(CustomRuntime)
+val CustomTest = config("test") extend(CustomRuntime)
 
-//lazy val CustomIntegrationTest = config("it") extend(CustomRuntime)
+val CustomIntegrationTest = config("it") extend(CustomRuntime)
 
 val commonSettings = Seq(
   version := "1.0.0-SNAPSHOT",
-  scalacOptions += "-Ylog-classpath",
   organization := "org.scalawag",
   scalaVersion := "2.11.8",
   parallelExecution in IntegrationTest := false,
@@ -27,19 +25,17 @@ val commonSettings = Seq(
 
 lazy val core = project
   .enablePlugins(JavaServerAppPackaging)
-  .overrideConfigs(Macro, CustomCompile, CustomRuntime, IntegrationTest)
-//  .overrideConfigs(Macro, CustomCompile, CustomRuntime, CustomTest, IntegrationTest)
+  .overrideConfigs(CustomMacro, CustomCompile, CustomRuntime, CustomTest, CustomIntegrationTest)
   .settings(Defaults.itSettings)
   .settings(commonSettings)
   .settings(
     name := "jibe-core",
-//    ivyConfigurations := overrideConfigs(Macro, CustomCompile, CustomRuntime, CustomTest)(ivyConfigurations.value),
-    inConfig(Macro) {
-      Defaults.compileSettings ++
-      Seq(
-        classpathConfiguration := CustomCompile
-      )
-    },
+    inConfig(CustomMacro)(Defaults.compileSettings),
+    inConfig(CustomCompile)(Defaults.compileSettings),
+    inConfig(CustomRuntime)(Defaults.configSettings),
+    inConfig(CustomTest)(Defaults.testSettings),
+    inConfig(CustomIntegrationTest)(Defaults.testSettings),
+    inConfig(CustomMacro)(classpathConfiguration := CustomCompile),
     // TODO: Ideally, this should only grab the .sh files and not the .scala files
     unmanagedResourceDirectories in CustomCompile ++= ( sourceDirectories in CustomCompile ).value
   )
