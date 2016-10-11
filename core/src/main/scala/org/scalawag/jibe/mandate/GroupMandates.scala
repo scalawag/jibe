@@ -1,14 +1,7 @@
 package org.scalawag.jibe.mandate
 
 import org.scalawag.jibe.backend.GroupResource
-
-case class Group(name: String,
-                 gid: Option[Int] = None,
-                 system: Boolean = false)
-
-object Group {
-  implicit def fromString(name: String) = Group(name)
-}
+import org.scalawag.jibe.mandate.command.Group
 
 /** Creates the group with the specified attributes (if it does not already exist) or modifies the existing group such
   * that its attributes match those specified.  Any optional members of the {@link Group} argument will be defaulted

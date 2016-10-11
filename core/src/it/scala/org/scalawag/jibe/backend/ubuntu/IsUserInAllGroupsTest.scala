@@ -1,8 +1,7 @@
 package org.scalawag.jibe.backend.ubuntu
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSpec, Matchers}
-import org.scalawag.jibe.mandate.{Group, User}
-import org.scalawag.jibe.mandate.command.{CreateOrUpdateGroup, CreateOrUpdateUser, DeleteUser, IsUserInAllGroups}
+import org.scalawag.jibe.mandate.command._
 
 class IsUserInAllGroupsTest extends FunSpec with Matchers with BeforeAndAfter with BeforeAndAfterAll with VagrantTest {
   val groupA = "groupA"

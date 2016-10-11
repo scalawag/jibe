@@ -1,18 +1,7 @@
 package org.scalawag.jibe.mandate
 
 import org.scalawag.jibe.backend.{FileResource, GroupResource, UserResource}
-
-case class User(name: String,
-                primaryGroup: Option[String] = None,
-                uid: Option[Int] = None,
-                home: Option[String] = None,
-                shell: Option[String] = None,
-                comment: Option[String] = None,
-                system: Boolean = false)
-
-object User {
-  implicit def fromString(name: String) = User(name)
-}
+import org.scalawag.jibe.mandate.command.User
 
 case class CreateOrUpdateUser(user: User) extends Mandate {
   override val description = Some(s"update user: ${user.name}")

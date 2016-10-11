@@ -1,6 +1,6 @@
 package org.scalawag.jibe.backend
 
-import org.scalawag.jibe.mandate.{Group, User}
+import org.scalawag.jibe.mandate.command.{Group, User}
 
 // Needs to be strings unless we always make sure that the user has ensured a group exists.  Otherwise, we can't
 // guarantee that there will be an object to put here.
