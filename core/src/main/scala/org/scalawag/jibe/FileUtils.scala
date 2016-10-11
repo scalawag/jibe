@@ -5,7 +5,7 @@ import java.io._
 object FileUtils {
 
   def writeFileWithOutputStream(f: File)(fn: OutputStream => Unit): Unit = {
-    mkdir(f.getParentFile)
+    Option(f.getParentFile).foreach(mkdir)
 
     val os = new FileOutputStream(f)
     try {
@@ -16,7 +16,7 @@ object FileUtils {
   }
 
   def writeFileWithPrintWriter(f: File)(fn: PrintWriter => Unit): Unit = {
-    mkdir(f.getParentFile)
+    Option(f.getParentFile).foreach(mkdir)
 
     val pw = new PrintWriter(new FileWriter(f))
     try {

@@ -6,7 +6,11 @@ import org.scalawag.jibe.mandate.MandateExecutionContext
 import org.scalawag.jibe.mandate.command.CommandArgument.ToStructure
 import org.scalawag.jibe.mandate.command._
 
-class UbuntuCommander(ssh: SshInfo, sudo: Boolean = false) extends SecureShellBackend(ssh, sudo) with Commander {
+import scala.reflect.ClassTag
+import scala.reflect.runtime.universe._
+import scala.reflect.runtime.currentMirror
+
+case class UbuntuCommander(ssh: SshInfo, sudo: Boolean = false) extends SecureShellBackend(ssh, sudo) with Commander {
 
   override def execute[A](command: Command[A])(implicit context: MandateExecutionContext): A = {
     command match {

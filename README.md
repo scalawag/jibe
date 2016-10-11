@@ -10,31 +10,60 @@ installed.
 Currently, we have as a demo a few commands hard-coded into Main, including some that are designed to fail to 
 demonstrate what that looks like in the "results" output.
 
-1. `git clone git@github.com:scalawag/jibe.git`
-2. `cd jibe`
-3. `vagrant up`
-4. `sbt core/run`
-5. `open results/latest/html/index.html`
+### To prepare your system
 
-To run the unit tests: `sbt it:test`
+```
+git clone git@github.com:scalawag/jibe.git
+cd jibe
+vagrant up
+```
+
+### To run the mandates in Main
+
+```
+sbt "core/run-main org.scalawag.jibe.Main"
+```
+
+### To view the results of the run
+
+```
+sbt "core/run-main org.scalawag.jibe.report.ReportServer"
+open http://localhost:8080/
+```
+
+The first command is a long-running process, so you may need to use
+another shell window (or your browser) to open the results URL. 
+
+You can leave this report server running while you run the mandates
+again (see above) and just refresh the browser each time to see the
+results of the latest run.
+
+### To run the unit tests
+
+```
+sbt test
+```
+
+### To run the integration tests
+
+Your vagrant machines must be running for the integration tests to work.
+
+```
+sbt it:test
+```
 
 ## TODOs
 
 ### Things to prove/demonstrate:
- - command timeouts
- - file transfer
- - templating
- - clean/readable output in the face of:
-   - parallel command execution
-   - multiple target systems
-   - variable order of commands (dependencies may change the obvious order when flattened to a list) 
- - environment where end-users can add (a la sbt's projects
-   - custom atomic mandates (system-specific SSH commands) with prerequisites and consequences
-   - custom composite mandates (aggregations of other mandates) to make higher-level directives
-   - custom resources that were not foreseen in the jibe core
+ - environment where end-users can add:
+   - custom Commands (abstract system-apathetic operations)
+   - custom Mandates (higher-level system-apathetic operations)
+   - custom (system-specific) implementations of abstract commands
+   - custom data types to use as arguments to custom Commands/Mandates
+   - custom arbitrary code (e.g., a function that generates a composite mandate)
+   - custom Resources that were not foreseen in the jibe core
 
 ### Things to decide on:
- - What's the best way to represent the source structure in the output once the list of commands is flattened?
  - Should the scala code be able to get data from the stdout of commands or should all decisions be made inside the mandates?
  - What else should be resources?  Is the weak-matching-by-name-only thing I've done so far sufficient?
    - How can you handle things like one mandate producing a directory of files while another uses only one file in that directory?

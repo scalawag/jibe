@@ -1,7 +1,6 @@
 package org.scalawag.jibe.mandate
 
-import org.scalawag.jibe.backend.Resource
-import org.scalawag.jibe.mandate.command.{BooleanCommand, Command, UnitCommand}
+import org.scalawag.jibe.mandate.command.Command
 
 /** A Mandate is an operation that can be executed against a system.  It may be realized as a series of system-specific
   * commands or it can be an aggregation of several other Mandates.
@@ -15,39 +14,22 @@ trait Mandate {
   val description: Option[String] = None
   def prerequisites: Iterable[Resource] = Iterable.empty
   def consequences: Iterable[Resource] = Iterable.empty
-
-  // Some(true) -> action is not needed
-  // Some(false) -> action is needed
-  // None -> can't tell if action is needed
-  def isActionCompleted(implicit context: MandateExecutionContext): Option[Boolean] = None
-
-  // false -> action was unneeded
-  // true -> action was needed and completed
-  def takeActionIfNeeded(implicit context: MandateExecutionContext): Boolean
-
-  protected[this] def ifNeeded(fn: => Unit)(implicit context: MandateExecutionContext): Boolean =
-    isActionCompleted match {
-      case Some(true) =>
-        false
-      case _ =>
-        fn
-        true
-    }
-
-  override def toString = description.getOrElse(super.toString)
-
-  protected[this] def runCommand[A](command: Command[A])(implicit context: MandateExecutionContext) = {
-    context.commander.execute(command)
-  }
 }
 
-// TODO: lose this pimper?  It's only here to make this seem more DSL-y and this isn't the DSL.  We don't have one yet.
-object Mandate {
-  implicit class MandatePimper(mandate: Mandate) {
-    def before(after: Mandate) = mandate match {
-      // If the mandate we're adding to is already a fixed-order CompositeMandate, just add it.
-      case CompositeMandate(desc, innards, true) => new CompositeMandate(desc, innards :+ after, true)
-      case m => new CompositeMandate(None, Seq(m, after), true)
-    }
+trait StatelessMandate extends Mandate {
+  def isActionCompleted(implicit context: MandateExecutionContext): Boolean = throw new UnsupportedOperationException
+  def takeAction(implicit context: MandateExecutionContext): Unit
+}
+
+trait StatefulMandate[A] extends Mandate {
+  def createState(implicit context: MandateExecutionContext): A
+  def cleanupState(state: A)(implicit context: MandateExecutionContext): Unit = {}
+  def isActionCompleted(state: A)(implicit context: MandateExecutionContext): Boolean
+  def takeAction(state: A)(implicit context: MandateExecutionContext): Unit
+}
+
+trait MandateHelpers {
+  protected[this] def runCommand[A](command: Command[A])(implicit context: MandateExecutionContext) = {
+    context.commander.execute(command)
   }
 }

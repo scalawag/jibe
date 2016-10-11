@@ -3,10 +3,10 @@ package org.scalawag.jibe.mandate
 import java.io._
 
 import org.fusesource.scalate._
-import org.scalawag.jibe.backend.FileResource
+import org.scalawag.jibe.backend._
 import org.scalawag.jibe.mandate.command._
 
-abstract class WriteRemoteFileBase(val remotePath: File) extends Mandate {
+abstract class WriteRemoteFileBase(val remotePath: File) extends Mandate with MandateHelpers {
   override def consequences = Iterable(FileResource(remotePath.getAbsolutePath))
 
   protected def doesRemoteFileAlreadyContain(content: FileContent)(implicit context: MandateExecutionContext): Boolean = {
@@ -32,23 +32,24 @@ abstract class WriteRemoteFileBase(val remotePath: File) extends Mandate {
   }
 }
 
-case class WriteRemoteFile(override val remotePath: File, content: FileContent) extends WriteRemoteFileBase(remotePath) {
+case class WriteRemoteFile(override val remotePath: File, content: FileContent)
+  extends WriteRemoteFileBase(remotePath) with StatelessMandate
+{
   override val description = Some(s"write remote file: $content -> $remotePath")
 
   override def isActionCompleted(implicit context: MandateExecutionContext) =
-    Some(doesRemoteFileAlreadyContain(content))
+    doesRemoteFileAlreadyContain(content)
 
-  override def takeActionIfNeeded(implicit context: MandateExecutionContext) = ifNeeded {
+  override def takeAction(implicit context: MandateExecutionContext) =
     writeRemoteFile(content)
-  }
 }
 
 case class WriteRemoteFileFromTemplate(override val remotePath: File, template: FileContent, values: Map[String, Any])
-  extends WriteRemoteFileBase(remotePath)
+  extends WriteRemoteFileBase(remotePath) with StatefulMandate[FileContent]
 {
   override val description = Some(s"write remote file with template: $template -> $remotePath")
 
-  private[this] def produceContent(implicit context: MandateExecutionContext): FileContent = {
+  override def createState(implicit context: MandateExecutionContext) = {
     context.log.debug(s"generating content from template $template and values $values")
     // Anything less than 16k or already in memory will be expanded in memory, anything larger than that and we'll
     // write a temp file.
@@ -95,33 +96,19 @@ case class WriteRemoteFileFromTemplate(override val remotePath: File, template: 
     }
   }
 
-  private[this] def cleanup(content: FileContent)(implicit context: MandateExecutionContext): Unit =
-    content match {
+  override def isActionCompleted(state: FileContent)(implicit context: MandateExecutionContext) =
+    doesRemoteFileAlreadyContain(state)
+
+  override def takeAction(state: FileContent)(implicit context: MandateExecutionContext) =
+    writeRemoteFile(state)
+
+  private[this] def cleanup(state: FileContent)(implicit context: MandateExecutionContext) =
+    state match {
       case FileContentFromFile(f) =>
         context.log.debug(s"deleting temporary file $f")
         f.delete()
       case FileContentFromArray(_) =>
         // noop
     }
-
-  override def isActionCompleted(implicit context: MandateExecutionContext) = {
-    val content = produceContent
-    try {
-      Some(doesRemoteFileAlreadyContain(content))
-    } finally {
-      cleanup(content)
-    }
-  }
-
-  override def takeActionIfNeeded(implicit context: MandateExecutionContext) = {
-    val content = produceContent
-    try {
-      ifNeeded {
-        writeRemoteFile(content)
-      }
-    } finally {
-      cleanup(content)
-    }
-  }
 }
 

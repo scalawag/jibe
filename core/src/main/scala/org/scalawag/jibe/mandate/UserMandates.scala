@@ -1,9 +1,8 @@
 package org.scalawag.jibe.mandate
 
-import org.scalawag.jibe.backend.{FileResource, GroupResource, UserResource}
 import org.scalawag.jibe.mandate.command.User
 
-case class CreateOrUpdateUser(user: User) extends Mandate {
+case class CreateOrUpdateUser(user: User) extends StatelessMandate with MandateHelpers {
   override val description = Some(s"update user: ${user.name}")
 
   override def prerequisites = Iterable(
@@ -15,20 +14,18 @@ case class CreateOrUpdateUser(user: User) extends Mandate {
   override def consequences = Iterable(UserResource(user.name))
 
   override def isActionCompleted(implicit context: MandateExecutionContext) =
-    Some(runCommand(command.DoesUserExist(user)))
+    runCommand(command.DoesUserExist(user))
 
-  override def takeActionIfNeeded(implicit context: MandateExecutionContext) = ifNeeded {
+  override def takeAction(implicit context: MandateExecutionContext) =
     runCommand(command.CreateOrUpdateUser(user))
-  }
 }
 
-case class DeleteUser(userName: String) extends Mandate {
+case class DeleteUser(userName: String) extends StatelessMandate with MandateHelpers {
   override val description = Some(s"delete user: ${userName}")
 
   override def isActionCompleted(implicit context: MandateExecutionContext) =
-    Some(! runCommand(command.DoesUserExist(User(userName))))
+    ! runCommand(command.DoesUserExist(User(userName)))
 
-  override def takeActionIfNeeded(implicit context: MandateExecutionContext) = ifNeeded {
+  override def takeAction(implicit context: MandateExecutionContext) =
     runCommand(command.DeleteUser(userName))
-  }
 }

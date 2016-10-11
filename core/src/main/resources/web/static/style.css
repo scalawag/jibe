@@ -6,23 +6,56 @@ body {
   min-width: 1000px;
 }
 
-div.mandate.success > div.summary {
+table {
+  border-collapse: collapse;
+}
+
+tr {
+  border: 1px solid white;
+}
+
+td {
+  padding-left: .5em;
+  padding-right: .5em;
+  padding-bottom: .25em;
+  padding-top: .25em;
+}
+
+a {
+  text-decoration: none;
+  color: black;
+}
+
+tr.mandate.success,
+div.mandate.success > div.summary,
+div.mandate.needed > div.summary
+{
   background-color: #DFF2BF;
 }
 
+tr.mandate.failure,
 div.mandate.failure > div.summary {
   background-color: #FFBABA;
 }
 
+tr.mandate.blocked,
+div.mandate.blocked > div.summary {
+  background-color: #FFBABA;
+}
+
+tr.mandate.running,
 div.mandate.running > div.summary {
   background-color: #c3e6fc;
 }
 
-div.mandate.skipped > div.summary {
+tr.mandate.unneeded,
+div.mandate.unneeded > div.summary {
   background-color: #FEEFB3;
 }
 
-div.mandate.waiting > div.summary {
+tr.mandate.pending,
+div.mandate.pending > div.summary {
+  background-color: #DDDDDD;
 }
 
 div.row {
@@ -141,6 +174,14 @@ div.log div.line, div.log div.line-number {
   padding-bottom: .1em;
 }
 
+div.log div.line span.line {
+  padding-left: .5em;
+}
+
+div.log div.line-number {
+  text-align: right;
+}
+
 div.log div.line-numbers {
   float: left;
 }
@@ -167,6 +208,12 @@ div.log div.wrn {
 
 div.log > div.err {
   color: red;
+}
+
+div.log div.FS, div.log div.FR {
+  background-color: #d17300;
+//  background-color: #9e5700;
+//  color: black;
 }
 
 div.log div.section {
@@ -224,7 +271,11 @@ div.log div.stack-trace {
   padding: 0;
 }
 
-div.log div.stack-trace div.line.location {
+div.log div.stack-trace div.line.stack-frame {
   background-color: lightgray;
   color: #C41E2A;
+}
+
+.force-content:after {
+  content: '\00a0';
 }

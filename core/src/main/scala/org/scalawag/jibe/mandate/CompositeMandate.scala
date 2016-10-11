@@ -1,51 +1,19 @@
 package org.scalawag.jibe.mandate
 
-import java.io.File
-import org.scalawag.jibe.FileUtils._
-import org.scalawag.jibe.backend.Executive
+import org.scalawag.jibe.backend.Commander
 
-case class CompositeMandate(override val description: Option[String], mandates: Seq[Mandate], fixedOrder: Boolean = false) extends Mandate {
-  override def consequences = mandates.flatMap(_.consequences)
+abstract class CompositeMandateBase(override val description: Option[String], val mandates: Seq[Mandate]) extends Mandate
 
-  override def prerequisites = (mandates.flatMap(_.prerequisites).toSet -- consequences)
+// Child mandates can be executed in any order
+case class MandateSet(override val description: Option[String], override val mandates: Seq[Mandate])
+  extends CompositeMandateBase(description, mandates)
 
-  override def isActionCompleted(implicit context: MandateExecutionContext): Option[Boolean] =
-    foreachMandateWithDirectory(context.resultsDir, optionBooleanReducer) { (mandate, subdir) =>
-      Executive.executeMandate(Executive.IS_ACTION_COMPLETED)(subdir, context.commander, mandate)
-    }
+// Child mandates must be executed in order.
+case class MandateSequence(override val description: Option[String], override val mandates: Seq[Mandate])
+  extends CompositeMandateBase(description, mandates)
 
-  override def takeActionIfNeeded(implicit context: MandateExecutionContext): Boolean =
-    foreachMandateWithDirectory(context.resultsDir, booleanReducer) { (mandate, subdir) =>
-      Executive.executeMandate(Executive.TAKE_ACTION_IF_NEEDED)(subdir, context.commander, mandate)
-    }
+case class CommanderMandate(commander: Commander, val mandate: Mandate)
+  extends CompositeMandateBase(Some(commander.toString), Seq(mandate))
 
-  protected[this] val booleanReducer = { (l: Boolean, r: Boolean) => l || r }
-  protected[this] val optionBooleanReducer = { (l: Option[Boolean], r: Option[Boolean]) =>
-    (l, r) match {
-      case (None, _) => None
-      case (_, None) => None
-      case (Some(true), _) => Some(true)
-      case (_, Some(true)) => Some(true)
-      case _ => Some(false)
-    }
-  }
-
-  protected[this] def foreachMandateWithDirectory[T](resultsDir: File, reducer: (T, T) => T)(fn: (Mandate, File) => T): T = {
-    val width = math.log10(mandates.length).toInt + 1
-
-    mandates.zipWithIndex map { case (m, n) =>
-      val subdir = s"%0${width}d".format(n + 1) + m.description.map(s => "_" + s.replaceAll("\\W+", "_")).getOrElse("")
-
-      val childDir = mkdir(resultsDir / subdir)
-      fn(m, childDir)
-    } reduce(reducer)
-  }
-}
-
-object CompositeMandate {
-  def apply(mandates: Mandate*): CompositeMandate =
-    new CompositeMandate(None, mandates, false)
-
-  def apply(description: String, mandates: Mandate*): CompositeMandate =
-    new CompositeMandate(Some(description), mandates, false)
-}
+case class RunMandate(val timestamp: String, override val mandates: Seq[CommanderMandate])
+  extends CompositeMandateBase(Some(timestamp), mandates)
