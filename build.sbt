@@ -2,6 +2,8 @@ import sbt._
 import Dependencies._
 import Utils._
 
+// Customize all configurations to enable macros to compile before the main bulk of the source.
+
 val CustomMacro = config("macro")
 
 val CustomCompile = config("compile") extend(CustomMacro)
@@ -30,14 +32,18 @@ lazy val core = project
   .settings(commonSettings)
   .settings(
     name := "jibe-core",
+    // Make all of our custom configurations work the way their namesakes do.
     inConfig(CustomMacro)(Defaults.compileSettings),
     inConfig(CustomCompile)(Defaults.compileSettings),
     inConfig(CustomRuntime)(Defaults.configSettings),
     inConfig(CustomTest)(Defaults.testSettings),
     inConfig(CustomIntegrationTest)(Defaults.testSettings),
+    // Don't know what this does or why it is needed, but it is.
     inConfig(CustomMacro)(classpathConfiguration := CustomCompile),
-    // TODO: Ideally, this should only grab the .sh files and not the .scala files
-    unmanagedResourceDirectories in CustomCompile ++= ( sourceDirectories in CustomCompile ).value
+    // Include macro config classes in the main jar built out of the compile config classes.
+    inConfig(CustomCompile)(products ++= ( products in CustomMacro ).value),
+    // Get rid of classifier on the artifact built by our new "compile" config (otherwise, it's "compile").
+    artifact in (CustomCompile, packageBin) ~= ( _.copy(classifier = None) )
   )
   .dependsOnRemote(
     jsch,
