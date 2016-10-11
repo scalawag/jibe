@@ -12,7 +12,7 @@ var Jibe = new function() {
   var Mandate = function(status) {
     this.mandateId = status.id;
     this.elements = this.createElements();
-    this.updateSummary(status);
+    this.updateStatus(status);
 
     jibeMandates[this.mandateId] = this;
   }
@@ -83,7 +83,9 @@ var Jibe = new function() {
     };
   }
 
-  Mandate.prototype.updateSummary = function(status) {
+  Mandate.prototype.updateStatus = function(status) {
+    this.status = status;
+
     var icon = null;
     switch ( status.executiveStatus ) {
       case 'PENDING' : icon = 'fa-clock-o'      ; break;
@@ -529,9 +531,35 @@ var Jibe = new function() {
     populateChildMandates(mandates, 'm0'); // TODO: load children just-in-time when the mandate is expanded.
   }
 
+  var refreshInterval = undefined;
+
+  function refreshMandates() {
+    var activeMandateCount = 0;
+
+    $.each(jibeMandates, function(mandateId, mandate) {
+      // Only update the ones that could change (pending and running).  Every other status is terminal.
+
+      if ( mandate.status.executiveStatus == 'PENDING' || mandate.status.executiveStatus == 'RUNNING' ) {
+        console.log('poll ' + mandateId);
+        $.getJSON( mandateId + '/status', function( status ) {
+          if ( status != null ) mandate.updateStatus(status);
+        });
+
+        activeMandateCount += 1;
+      }
+
+    });
+
+    // Stop polling once all of our mandates have reached a terminal state.
+
+    if ( activeMandateCount == 0 )
+      clearInterval(refreshInterval);
+  }
+
   this.initialize = function() {
     $.getJSON( "run", function( run ) {
       initializeMandateStructure(run);
+      refreshInterval = setInterval(refreshMandates, 1000);
     })
   }
 };
