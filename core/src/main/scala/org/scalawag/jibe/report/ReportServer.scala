@@ -1,7 +1,6 @@
 package org.scalawag.jibe.report
 
 import java.io.{File, FileFilter, PrintWriter}
-
 import akka.actor.ActorSystem
 import spray.routing.{Directive1, Route, SimpleRoutingApp}
 import spray.httpx.SprayJsonSupport
@@ -12,15 +11,11 @@ import org.scalawag.timber.api.Logger
 import spray.http.StatusCodes
 import spray.util.LoggingContext
 import org.scalawag.jibe.FileUtils._
-
-import scala.util.Try
 import spray.http.HttpHeaders.`Cache-Control`
 import spray.http.CacheDirectives.{`max-age`, `no-cache`}
-
 import scala.annotation.tailrec
 import scala.io.Source
 import Logging.log
-import spray.httpx.marshalling.ToResponseMarshallable
 
 class ReportServer(port: Int = 8080, interface: String = "0.0.0.0") extends SimpleRoutingApp with SprayJsonSupport {
   private[this] implicit val system = ActorSystem()
@@ -116,7 +111,12 @@ class ReportServer(port: Int = 8080, interface: String = "0.0.0.0") extends Simp
                     getFromFile( mandateDir / "mandate.js" )
                   } ~
                   path("log") {
-                    getFromFile( mandateDir / "log" )
+                    // TODO: I'm not sure if this is as efficient as actually starting to serve the file at the
+                    // specified byte.  This probably is so generic that it has to just discard the first N bytes.
+                    // This is really easy and built-in, though.
+                    withRangeSupport(1, 0L) {
+                      getFromFile( mandateDir / "log" )
+                    }
                   }
                 }
               } ~
@@ -168,10 +168,3 @@ object ReportServer {
     rs.start
   }
 }
-
-/*
-run/0-1-1/
-run/mandatePath/status -> JSObject
-run/mandatePath/children -> JSObject[ id -> JSObject]
-run/mandatePath/log
- */

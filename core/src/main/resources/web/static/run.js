@@ -2,8 +2,6 @@
 // Jibe us used to maintain the page-wide state of the jibe app.
 
 var Jibe = new function() {
-  var jibeLogs = {};
-  var jibeMandates = {};
 
   //====================================================================================================================
   // The Mandate class is used keep track of one mandate job summary, which maps to a div with a summary and
@@ -12,9 +10,21 @@ var Jibe = new function() {
   var Mandate = function(status) {
     this.mandateId = status.id;
     this.elements = this.createElements();
+
+    // If this is a leaf mandate, initialize its log.
+    if ( ! status.composite ) {
+      // TODO: eventually have the logs load just-in-time when the leaf mandate is expanded instead of all at once?
+      this.log = new Log(status.id);
+      this.elements.details.append(this.log.elements.root);
+      this.log.update();
+    }
+
+    // initialize the status
     this.updateStatus(status);
 
-    jibeMandates[this.mandateId] = this;
+    // start polling for status changes
+    var self = this;
+    this.updateInterval = setInterval(function() { self.update() }, 1000);
   }
 
   // Create the summary and details structure (which doesn't change throughout the life of this Mandate.  Only the
@@ -107,6 +117,22 @@ var Jibe = new function() {
     }
 
     this.elements.mandate.attr('class', 'mandate ' + status.executiveStatus);
+  }
+
+  Mandate.prototype.update = function() {
+    console.log('updating mandate' + this.status.id);
+
+    var self = this;
+    $.getJSON( this.status.id + '/status', function( status ) {
+      if ( status != null ) self.updateStatus(status);
+    });
+
+    if ( this.log ) this.log.update();
+
+    // Poll again if this mandate has not reached a terminal state.
+
+    if ( this.status.executiveStatus != 'PENDING' && this.status.executiveStatus != 'RUNNING' )
+      clearInterval(this.updateInterval);
   }
 
   //====================================================================================================================
@@ -348,6 +374,7 @@ var Jibe = new function() {
 
   var Log = function(mandateId) {
     this.mandateId = mandateId;
+    this.bytesRendered = 0;
 //    this.tailStack = [div];
 //    this.nextCallSerial = 0;
     this.lastStackTraceSerial = -1;
@@ -379,8 +406,6 @@ var Jibe = new function() {
 
     this.div = logDiv;
 
-    jibeLogs[mandateId] = this;
-
     this.lastItem = undefined;
 
     this.elements = {
@@ -390,9 +415,6 @@ var Jibe = new function() {
   }
 
   Log.prototype.appendLine = function(rawLine) {
-    // skip blank lines (ones without even a timestamp) - usually the last one in a block of text
-    if ( rawLine.length == 0 ) return;
-
     var line = this.parseLine(rawLine);
 
     switch (line.tag) {
@@ -466,35 +488,40 @@ var Jibe = new function() {
 
         this.elements.lines.append(e);
     }
+
+    this.bytesRendered += rawLine.length + 1;
   }
 
   Log.prototype.appendText = function(text) {
     var self = this;
     var lines = text.split('\n');
-    $.each(lines, function(n, line) { self.appendLine(line) });
+
+    // Always skip the last line.  It could be partial (and we don't know how to render partial lines) and the
+    // last line, once the log is complete, will always be empty.
+    lines.pop();
+
+    $.each(lines, function(n, line) {
+      self.appendLine(line);
+    });
   }
 
+  Log.prototype.update = function() {
+    var self = this;
+    console.log('updating log: ' + self.mandateId + ' from ' + self.bytesRendered + ' bytes');
+
+    $.ajax({
+      url: self.mandateId + '/log',
+      type: 'GET',
+      dataType: 'json',
+      headers: { 'Range': 'bytes=' + self.bytesRendered + '-' },
+      complete: function ( rsp ) {
+        if ( rsp.status == 206 )
+          self.appendText(rsp.responseText);
+      },
+    });
+  }
 
   //======================================================================================================================
-
-
-//  function initializeLog(container, mandateId) {
-//    var logDiv =
-//      $('<div>', {
-//        class: 'log',
-//        id: mandateId + '_L',
-//      });
-//
-//    var row =
-//      $('<div>', {
-//        class: 'row mono'
-//      }).append(logDiv);
-//
-//    container.append(row);
-//
-//    jibeLogs[mandateId] = new Log(logDiv, mandateId);
-//
-//  }
 
   function populateChildMandates(container, mandateId) {
     $.getJSON( mandateId + '/children', function( children ) {
@@ -506,15 +533,6 @@ var Jibe = new function() {
         // recursively add the children of this mandate (if it's a composite).  Add its log otherwise.
         if ( child.composite ) {
           populateChildMandates(details, child.id);
-        } else {
-          var log = new Log(child.id);
-          details.append(log.elements.root);
-
-          // TODO: eventually have the logs load just-in-time when the leaf mandate is expanded instead of all at once.
-          $.get( child.id + '/log', function( text ) {
-            log.appendText(text);
-          });
-
         }
 
         container.append(m.elements.mandate);
@@ -531,35 +549,9 @@ var Jibe = new function() {
     populateChildMandates(mandates, 'm0'); // TODO: load children just-in-time when the mandate is expanded.
   }
 
-  var refreshInterval = undefined;
-
-  function refreshMandates() {
-    var activeMandateCount = 0;
-
-    $.each(jibeMandates, function(mandateId, mandate) {
-      // Only update the ones that could change (pending and running).  Every other status is terminal.
-
-      if ( mandate.status.executiveStatus == 'PENDING' || mandate.status.executiveStatus == 'RUNNING' ) {
-        console.log('poll ' + mandateId);
-        $.getJSON( mandateId + '/status', function( status ) {
-          if ( status != null ) mandate.updateStatus(status);
-        });
-
-        activeMandateCount += 1;
-      }
-
-    });
-
-    // Stop polling once all of our mandates have reached a terminal state.
-
-    if ( activeMandateCount == 0 )
-      clearInterval(refreshInterval);
-  }
-
   this.initialize = function() {
     $.getJSON( "run", function( run ) {
       initializeMandateStructure(run);
-      refreshInterval = setInterval(refreshMandates, 1000);
     })
   }
 };
