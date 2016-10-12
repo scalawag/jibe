@@ -96,16 +96,7 @@ var Jibe = new function() {
   Mandate.prototype.updateStatus = function(status) {
     this.status = status;
 
-    var icon = null;
-    switch ( status.executiveStatus ) {
-      case 'PENDING' : icon = 'fa-clock-o'      ; break;
-      case 'RUNNING' : icon = 'fa-gear fa-spin' ; break;
-      case 'UNNEEDED': icon = 'fa-times'        ; break;
-      case 'FAILURE' : icon = 'fa-exclamation'  ; break;
-      case 'SUCCESS' : icon = 'fa-check'        ; break;
-      case 'NEEDED'  : icon = 'fa-check'        ; break;
-      case 'BLOCKED' : icon = 'fa-ban'          ; break;
-    }
+    var icon = Jibe.getIconClassForStatus(status.executiveStatus);
 
     this.elements.icon.attr('class', 'fa ' + icon);
 
@@ -554,4 +545,146 @@ var Jibe = new function() {
       initializeMandateStructure(run);
     })
   }
+
+  this.getIconClassForStatus = function(status) {
+    switch ( status ) {
+      case 'PENDING' : return 'fa-clock-o';
+      case 'RUNNING' : return 'fa-gear fa-spin';
+      case 'UNNEEDED': return 'fa-times';
+      case 'FAILURE' : return 'fa-exclamation';
+      case 'SUCCESS' : return 'fa-check';
+      case 'NEEDED'  : return 'fa-check';
+      case 'BLOCKED' : return 'fa-ban';
+    }
+  }
+
+  this.updateRunList = function(limit, offset) {
+    limit = limit || 20
+    offset = offset || 0
+
+    var now = moment();
+
+    var params = $.param({
+      limit: limit,
+      offset: offset,
+    });
+
+    function df(m) {
+      return m.format('MM/DD/YYYY hh:mm:ss a');
+    }
+
+/*
+    function pad(n, width) {
+      var add = width - Math.floor(Math.log10(n)) - 1;
+      return "0".repeat(add) + n;
+    }
+
+    function age2(ms) {
+      var w, d, h, m, s, f;
+      s = Math.floor(ms / 1000);
+      f = ms % 1000;
+      m = Math.floor(s / 60);
+      s = s % 60;
+      h = Math.floor(m / 60);
+      m = m % 60;
+      d = Math.floor(h / 24);
+      h = h % 24;
+      w = Math.floor(d / 7);
+      d = d % 7;
+
+
+      if ( w > 0 || d > 0 ) {
+        var s = moment(now - ms);
+        return s.fromNow(true);
+      } else {
+        var out = '';
+        if ( h > 0 ) out += pad(h,2) + ':';
+        if ( m > 0 ) out += pad(m,2) + ':';
+        out += pad(s,2) + '.' + pad(f,3);
+        return out;
+      }
+    }
+*/
+
+    function age(ms) {
+      var w, d, h, m, s, f;
+      s = Math.floor(ms / 1000);
+      f = ms % 1000;
+      m = Math.floor(s / 60);
+      s = s % 60;
+      h = Math.floor(m / 60);
+      m = m % 60;
+      d = Math.floor(h / 24);
+      h = h % 24;
+      w = Math.floor(d / 7);
+      d = d % 7;
+
+      var out = '';
+
+      if ( w > 0 )
+        out += w + " w";
+      if ( d > 0 )
+        out += ' ' + d + 'd';
+      if ( h > 0 )
+        out += ' ' + h + 'h';
+      if ( m > 0 )
+        out += ' ' + m + 'm';
+      if ( s > 0 )
+        out += ' ' + s + 's';
+      if ( f > 0 )
+        out += ' ' + f + 'ms';
+
+      return out;
+    }
+
+    $.getJSON('/run?' + params, function( data ) {
+      var runs = $("table#runs");
+
+      $.each(data, function(n, run) {
+        var dateParts = run.description.split('-');
+        var date = new Date(dateParts[0],dateParts[1] - 1,dateParts[2],dateParts[3],dateParts[4],dateParts[5],dateParts[6]);
+        var timestamp = moment(date);
+
+        var icon = $('<i>', {
+          class: 'fa ' + Jibe.getIconClassForStatus(run.executiveStatus)
+        });
+
+        var runtime = $('<span>');
+
+        if ( run.endTime && run.startTime ) {
+          var sm = moment(run.startTime);
+          var em = moment(run.endTime);
+          runtime.text(age(em.diff(sm)));
+          runtime.attr('title', df(sm) + ' - ' + df(em) );
+        } else if ( run.startTime ) {
+          var sm = moment(run.startTime);
+          runtime.text(age(now.diff(sm)));
+          runtime.attr('title', df(sm) + ' - ');
+        }
+
+        var trash = $('<i>', {
+          class: 'fa fa-trash-o'
+        })
+        .click(function() {
+          if ( confirm('Do you really want to delete the results from run "' + run.description + '"?') )
+            alert("You can't actually do that yet.");
+        });
+
+        var e =
+          $('<tr>', {
+            class: 'mandate ' + run.executiveStatus,
+          }).append([
+            $('<td class="icon">').append($('<a>', { href: '/run/' + run.description + '/' }).append(icon)),
+            $('<td>').append($('<a>', { href: '/run/' + run.description + '/' }).text(df(timestamp))),
+            $('<td>').append($('<a>', { href: '/run/' + run.description + '/' }).text(timestamp.calendar())),
+            $('<td>').append($('<a>', { href: '/run/' + run.description + '/' }).text(timestamp.fromNow())),
+            $('<td class="runtime">').append($('<a>', { href: '/run/' + run.description + '/' }).append(runtime)),
+            $('<td>').append(trash),
+          ])
+
+        e.appendTo( runs );
+      });
+    });
+  }
+
 };

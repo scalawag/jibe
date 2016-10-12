@@ -1,71 +1,20 @@
 <html>
   <head>
     <meta charset="utf-8" />
+    <link rel="stylesheet" href="http://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css"/>
     <link rel="stylesheet" type="text/css" href="/static/style.css"/>
     <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.1/jquery.min.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.15.1/moment.min.js"></script>
+
+    <script type="text/javascript" src="/static/code.js"></script>
+    <script type="text/javascript" src="/static/run.js"></script>
+
+    <link rel="stylesheet" href="http://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.7.0/styles/github.min.css"/>
+    <script src="/static/highlight.bash.js"></script>
+
     <script type="text/javascript">
-      function age(ms) {
-        var w, d, h, m, s;
-        s = Math.floor(ms / 1000);
-        m = Math.floor(s / 60);
-        s = s % 60;
-        h = Math.floor(m / 60);
-        m = m % 60;
-        d = Math.floor(h / 24);
-        h = h % 24;
-        w = Math.floor(d / 7);
-        d = d % 7;
-
-        if ( w > 1 )
-          return w + " weeks ago";
-        else if ( d > 1 )
-          return d + " days ago";
-        else if ( d == 1 )
-          return " yesterday";
-        else if ( h > 1 )
-          return h + " hours ago";
-        else if ( h > 0 )
-          return h + " hour ago";
-        else if ( m > 1 )
-          return m + " minutes ago";
-        else if ( m > 0 )
-          return m + " minute ago";
-        else if ( s > 1 )
-          return s + " seconds ago";
-        else
-          return "now";
-      }
-
-      function updateRuns() {
-        var now = moment();
-
-        $.getJSON( "/run", function( data ) {
-          var runs = $("table#runs");
-
-          $.each(data, function(n, run) {
-            var dateParts = run.description.split('-');
-            var date = new Date(dateParts[0],dateParts[1] - 1,dateParts[2],dateParts[3],dateParts[4],dateParts[5],dateParts[6]);
-            var startTime = moment(date);
-
-            var e =
-              $('<tr>', {
-                class: 'mandate ' + run.executiveStatus,
-              }).append([
-                $('<td>').append($('<a>', { href: '/run/' + run.description + '/' }).text(startTime.format('MM/DD/YYYY hh:mm:ss a'))),
-                $('<td>').append($('<a>', { href: '/run/' + run.description + '/' }).text(startTime.calendar())),
-                $('<td>').append($('<a>', { href: '/run/' + run.description + '/' }).text(startTime.fromNow())),
-              ])
-
-            <!--var e =-->
-              <!--$('<tr class="mandate ' + run.executiveStatus + '"><td><a href="/run/' + run.description + '/">' + startTime.format('MM/DD/YYYY hh:mm:ss a') + '</a></td><td>' + startTime.calendar() + '</td><td>' + startTime.fromNow() + '</td></tr>')-->
-            e.appendTo( runs );
-          });
-        });
-      }
-
       $(function() {
-        updateRuns();
+        Jibe.updateRunList();
       });
     </script>
   </head>
