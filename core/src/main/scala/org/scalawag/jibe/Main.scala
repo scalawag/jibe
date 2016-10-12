@@ -2,20 +2,14 @@ package org.scalawag.jibe
 
 import java.io.{File, PrintWriter}
 import java.text.SimpleDateFormat
-import java.util.{Date, TimeZone}
+import java.util.Date
 
 import FileUtils._
 import org.scalawag.jibe.backend.ubuntu.UbuntuCommander
 import org.scalawag.jibe.backend._
 import org.scalawag.jibe.mandate._
 import org.scalawag.jibe.mandate.command.{User, Group}
-import org.scalawag.timber.backend.receiver.formatter.timestamp.ISO8601TimestampFormatter
-import Logging._
 import org.scalawag.jibe.report.Model.Run
-
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
 
 object Main {
 
@@ -103,8 +97,6 @@ object Main {
       val job = MandateJob(runDir, runMandate, true)
 
       Executive.execute(job)
-
-//      Reporter.generate(runDir)
 
     } catch {
       case ex: AbortException => // System.exit(1) - bad within sbt
