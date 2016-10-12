@@ -53,6 +53,9 @@ lazy val core = project
     inConfig(CustomIntegrationTest)(Defaults.testSettings),
     // Don't know what this does or why it is needed, but it is.
     inConfig(CustomMacro)(classpathConfiguration := CustomCompile),
+    inConfig(CustomRuntime)(classpathConfiguration := Runtime),
+    inConfig(CustomTest)(classpathConfiguration := Test),
+    inConfig(CustomIntegrationTest)(classpathConfiguration := IntegrationTest),
     // Include macro config classes in the main jar built out of the compile config classes.
     inConfig(CustomCompile)(products ++= ( products in CustomMacro ).value),
     // Get rid of classifier on the artifact built by our new "compile" config (otherwise, it's "compile").
