@@ -82,6 +82,15 @@ class ReportServer(port: Int = 8080, interface: String = "0.0.0.0") extends Simp
     }
   }
 
+  private[this] def runDir(runId: String): Directive1[File] = {
+    val runDir = results / runId
+    if ( runDir.exists ) {
+      provide(runDir)
+    } else {
+      reject
+    }
+  }
+
   def start: Unit = {
     startServer(interface, port) {
       path("stop") {
@@ -90,15 +99,15 @@ class ReportServer(port: Int = 8080, interface: String = "0.0.0.0") extends Simp
           StatusCodes.NoContent
         }
       } ~
-      pathPrefix("run") {
+      pathPrefix("data") {
         respondWithHeader(`Cache-Control`(`no-cache`, `max-age`(0))) {
-          pathEnd {
+          path("runs") {
             parameters('limit.as[Int] ? 100, 'offset.as[Int] ? 0) { (limit, offset) =>
               getSubdirMandateStatuses(results, true, limit, offset)
             }
           } ~
-          pathPrefix(Segment) { runId =>
-            provide(results / runId) { runDir =>
+          pathPrefix("run" / Segment) { runId =>
+            runDir(runId) { runDir =>
               path("run") {
                 getFromFile( runDir / "run.js" )
               } ~
@@ -119,9 +128,6 @@ class ReportServer(port: Int = 8080, interface: String = "0.0.0.0") extends Simp
                     }
                   }
                 }
-              } ~
-              pathSingleSlash {
-                getFromResource("web/run.html")
               }
             }
           }
@@ -129,6 +135,14 @@ class ReportServer(port: Int = 8080, interface: String = "0.0.0.0") extends Simp
       } ~
       pathEndOrSingleSlash {
         getFromResource("web/index.html")
+      } ~
+      path("latest" /) {
+        getFromResource("web/run.html")
+      } ~
+      path(Segment /) { runId =>
+        runDir(runId) { _ => // only allowed if the run exists
+          getFromResource("web/run.html")
+        }
       } ~
       pathPrefix("static") {
         getFromResourceDirectory("web/static")

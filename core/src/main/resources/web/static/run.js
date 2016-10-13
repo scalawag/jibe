@@ -2,19 +2,19 @@
 // Jibe us used to maintain the page-wide state of the jibe app.
 
 var Jibe = new function() {
-
   //====================================================================================================================
   // The Mandate class is used keep track of one mandate job summary, which maps to a div with a summary and
   // collapsible details in the DOM.
 
-  var Mandate = function(status) {
+  var Mandate = function(runId, status) {
+    this.runId = runId;
     this.mandateId = status.id;
     this.elements = this.createElements();
 
     // If this is a leaf mandate, initialize its log.
     if ( ! status.composite ) {
       // TODO: eventually have the logs load just-in-time when the leaf mandate is expanded instead of all at once?
-      this.log = new Log(status.id);
+      this.log = new Log(runId, status.id);
       this.elements.details.append(this.log.elements.root);
       this.log.update();
     }
@@ -111,19 +111,20 @@ var Jibe = new function() {
   }
 
   Mandate.prototype.update = function() {
-    console.log('updating mandate' + this.status.id);
-
     var self = this;
-    $.getJSON( this.status.id + '/status', function( status ) {
+
+    console.log('updating mandate' + self.status.id);
+
+    $.getJSON( '/data/run/' + self.runId + '/' + self.status.id + '/status', function( status ) {
       if ( status != null ) self.updateStatus(status);
     });
 
-    if ( this.log ) this.log.update();
+    if ( self.log ) self.log.update();
 
     // Poll again if this mandate has not reached a terminal state.
 
-    if ( this.status.executiveStatus != 'PENDING' && this.status.executiveStatus != 'RUNNING' )
-      clearInterval(this.updateInterval);
+    if ( self.status.executiveStatus != 'PENDING' && self.status.executiveStatus != 'RUNNING' )
+      clearInterval(self.updateInterval);
   }
 
   //====================================================================================================================
@@ -363,16 +364,12 @@ var Jibe = new function() {
   // build up the log display one line at a time. This makes it possible to append to the log without having to
   // reprocess the whole thing from scratch whenever new lines are written.
 
-  var Log = function(mandateId) {
+  var Log = function(runId, mandateId) {
+    this.runId = runId;
     this.mandateId = mandateId;
     this.bytesRendered = 0;
-//    this.tailStack = [div];
-//    this.nextCallSerial = 0;
     this.lastStackTraceSerial = -1;
     this.lastCommandSerial = -1;
-//    this.lastTag = undefined;
-//    this.inStackTraceLocation = false;
-//    this.currentLineNumber = 1;
 
     this.parseLine = function(line) {
       var parts = line.split('|');
@@ -501,7 +498,7 @@ var Jibe = new function() {
     console.log('updating log: ' + self.mandateId + ' from ' + self.bytesRendered + ' bytes');
 
     $.ajax({
-      url: self.mandateId + '/log',
+      url: '/data/run/' + self.runId + '/' + self.mandateId + '/log',
       type: 'GET',
       dataType: 'json',
       headers: { 'Range': 'bytes=' + self.bytesRendered + '-' },
@@ -514,16 +511,16 @@ var Jibe = new function() {
 
   //======================================================================================================================
 
-  function populateChildMandates(container, mandateId) {
-    $.getJSON( mandateId + '/children', function( children ) {
+  function populateChildMandates(container, runId, mandateId) {
+    $.getJSON( '/data/run/' + runId + '/' + mandateId + '/children', function( children ) {
       $.each(children, function(n, child) {
-        var m = new Mandate(child);
+        var m = new Mandate(runId, child);
 
         var details = m.elements.details;
 
         // recursively add the children of this mandate (if it's a composite).  Add its log otherwise.
         if ( child.composite ) {
-          populateChildMandates(details, child.id);
+          populateChildMandates(details, runId, child.id);
         }
 
         container.append(m.elements.mandate);
@@ -532,18 +529,31 @@ var Jibe = new function() {
   }
 
   // Builds the mandate structure (which doesn't change between runs)
-  function initializeMandateStructure(run) {
+  function initializeMandateStructure(runId, run) {
     $('#runId').text(run.startTime);
 
     var mandates = $('#mandates');
     mandates.empty();
-    populateChildMandates(mandates, 'm0'); // TODO: load children just-in-time when the mandate is expanded.
+    populateChildMandates(mandates, runId, 'm0'); // TODO: load children just-in-time when the mandate is expanded.
+  }
+
+  function initializeRun(runId) {
+    $.getJSON('/data/run/' + runId + '/run', function( run ) {
+      initializeMandateStructure(runId, run);
+    })
   }
 
   this.initialize = function() {
-    $.getJSON( "run", function( run ) {
-      initializeMandateStructure(run);
-    })
+    var pageId = document.location.href;
+    pageId = pageId.replace(/\/$/,'').replace(/.*\//,'');
+
+    if ( pageId == 'latest' ) {
+      $.getJSON('/data/runs?limit=1', function( run ) {
+        initializeRun(run[0].description);
+      })
+    } else {
+      initializeRun(pageId);
+    }
   }
 
   this.getIconClassForStatus = function(status) {
@@ -637,7 +647,7 @@ var Jibe = new function() {
       return out;
     }
 
-    $.getJSON('/run?' + params, function( data ) {
+    $.getJSON('/data/runs?' + params, function( data ) {
       var runs = $("table#runs");
 
       $.each(data, function(n, run) {
@@ -670,15 +680,19 @@ var Jibe = new function() {
             alert("You can't actually do that yet.");
         });
 
+        function link() {
+          return $('<a>', { href: '/' + run.description + '/' });
+        }
+
         var e =
           $('<tr>', {
             class: 'mandate ' + run.executiveStatus,
           }).append([
-            $('<td class="icon">').append($('<a>', { href: '/run/' + run.description + '/' }).append(icon)),
-            $('<td>').append($('<a>', { href: '/run/' + run.description + '/' }).text(df(timestamp))),
-            $('<td>').append($('<a>', { href: '/run/' + run.description + '/' }).text(timestamp.calendar())),
-            $('<td>').append($('<a>', { href: '/run/' + run.description + '/' }).text(timestamp.fromNow())),
-            $('<td class="runtime">').append($('<a>', { href: '/run/' + run.description + '/' }).append(runtime)),
+            $('<td class="icon">').append(link().append(icon)),
+            $('<td>').append(link().text(df(timestamp))),
+            $('<td>').append(link().text(timestamp.calendar())),
+            $('<td>').append(link().text(timestamp.fromNow())),
+            $('<td class="runtime">').append(link().append(runtime)),
             $('<td>').append(trash),
           ])
 
