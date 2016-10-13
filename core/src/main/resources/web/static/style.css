@@ -15,10 +15,15 @@ tr {
 }
 
 td {
-  padding-left: .5em;
-  padding-right: .5em;
-  padding-bottom: .25em;
-  padding-top: .25em;
+  padding-left: 1em;
+  padding-right: 1em;
+  padding-bottom: .5em;
+  padding-top: .5em;
+  text-align: right;
+}
+
+td.icon {
+  text-align: center;
 }
 
 a {

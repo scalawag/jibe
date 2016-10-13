@@ -2,19 +2,29 @@
 // Jibe us used to maintain the page-wide state of the jibe app.
 
 var Jibe = new function() {
-  var jibeLogs = {};
-  var jibeMandates = {};
-
   //====================================================================================================================
   // The Mandate class is used keep track of one mandate job summary, which maps to a div with a summary and
   // collapsible details in the DOM.
 
-  var Mandate = function(status) {
+  var Mandate = function(runId, status) {
+    this.runId = runId;
     this.mandateId = status.id;
     this.elements = this.createElements();
-    this.updateSummary(status);
 
-    jibeMandates[this.mandateId] = this;
+    // If this is a leaf mandate, initialize its log.
+    if ( ! status.composite ) {
+      // TODO: eventually have the logs load just-in-time when the leaf mandate is expanded instead of all at once?
+      this.log = new Log(runId, status.id);
+      this.elements.details.append(this.log.elements.root);
+      this.log.update();
+    }
+
+    // initialize the status
+    this.updateStatus(status);
+
+    // start polling for status changes
+    var self = this;
+    this.updateInterval = setInterval(function() { self.update() }, 1000);
   }
 
   // Create the summary and details structure (which doesn't change throughout the life of this Mandate.  Only the
@@ -83,17 +93,10 @@ var Jibe = new function() {
     };
   }
 
-  Mandate.prototype.updateSummary = function(status) {
-    var icon = null;
-    switch ( status.executiveStatus ) {
-      case 'PENDING' : icon = 'fa-clock-o'      ; break;
-      case 'RUNNING' : icon = 'fa-gear fa-spin' ; break;
-      case 'UNNEEDED': icon = 'fa-times'        ; break;
-      case 'FAILURE' : icon = 'fa-exclamation'  ; break;
-      case 'SUCCESS' : icon = 'fa-check'        ; break;
-      case 'NEEDED'  : icon = 'fa-check'        ; break;
-      case 'BLOCKED' : icon = 'fa-ban'          ; break;
-    }
+  Mandate.prototype.updateStatus = function(status) {
+    this.status = status;
+
+    var icon = Jibe.getIconClassForStatus(status.executiveStatus);
 
     this.elements.icon.attr('class', 'fa ' + icon);
 
@@ -105,6 +108,23 @@ var Jibe = new function() {
     }
 
     this.elements.mandate.attr('class', 'mandate ' + status.executiveStatus);
+  }
+
+  Mandate.prototype.update = function() {
+    var self = this;
+
+    console.log('updating mandate' + self.status.id);
+
+    $.getJSON( '/data/run/' + self.runId + '/' + self.status.id + '/status', function( status ) {
+      if ( status != null ) self.updateStatus(status);
+    });
+
+    if ( self.log ) self.log.update();
+
+    // Poll again if this mandate has not reached a terminal state.
+
+    if ( self.status.executiveStatus != 'PENDING' && self.status.executiveStatus != 'RUNNING' )
+      clearInterval(self.updateInterval);
   }
 
   //====================================================================================================================
@@ -344,15 +364,12 @@ var Jibe = new function() {
   // build up the log display one line at a time. This makes it possible to append to the log without having to
   // reprocess the whole thing from scratch whenever new lines are written.
 
-  var Log = function(mandateId) {
+  var Log = function(runId, mandateId) {
+    this.runId = runId;
     this.mandateId = mandateId;
-//    this.tailStack = [div];
-//    this.nextCallSerial = 0;
+    this.bytesRendered = 0;
     this.lastStackTraceSerial = -1;
     this.lastCommandSerial = -1;
-//    this.lastTag = undefined;
-//    this.inStackTraceLocation = false;
-//    this.currentLineNumber = 1;
 
     this.parseLine = function(line) {
       var parts = line.split('|');
@@ -377,8 +394,6 @@ var Jibe = new function() {
 
     this.div = logDiv;
 
-    jibeLogs[mandateId] = this;
-
     this.lastItem = undefined;
 
     this.elements = {
@@ -388,9 +403,6 @@ var Jibe = new function() {
   }
 
   Log.prototype.appendLine = function(rawLine) {
-    // skip blank lines (ones without even a timestamp) - usually the last one in a block of text
-    if ( rawLine.length == 0 ) return;
-
     var line = this.parseLine(rawLine);
 
     switch (line.tag) {
@@ -464,55 +476,51 @@ var Jibe = new function() {
 
         this.elements.lines.append(e);
     }
+
+    this.bytesRendered += rawLine.length + 1;
   }
 
   Log.prototype.appendText = function(text) {
     var self = this;
     var lines = text.split('\n');
-    $.each(lines, function(n, line) { self.appendLine(line) });
+
+    // Always skip the last line.  It could be partial (and we don't know how to render partial lines) and the
+    // last line, once the log is complete, will always be empty.
+    lines.pop();
+
+    $.each(lines, function(n, line) {
+      self.appendLine(line);
+    });
   }
 
+  Log.prototype.update = function() {
+    var self = this;
+    console.log('updating log: ' + self.mandateId + ' from ' + self.bytesRendered + ' bytes');
+
+    $.ajax({
+      url: '/data/run/' + self.runId + '/' + self.mandateId + '/log',
+      type: 'GET',
+      dataType: 'json',
+      headers: { 'Range': 'bytes=' + self.bytesRendered + '-' },
+      complete: function ( rsp ) {
+        if ( rsp.status == 206 )
+          self.appendText(rsp.responseText);
+      },
+    });
+  }
 
   //======================================================================================================================
 
-
-//  function initializeLog(container, mandateId) {
-//    var logDiv =
-//      $('<div>', {
-//        class: 'log',
-//        id: mandateId + '_L',
-//      });
-//
-//    var row =
-//      $('<div>', {
-//        class: 'row mono'
-//      }).append(logDiv);
-//
-//    container.append(row);
-//
-//    jibeLogs[mandateId] = new Log(logDiv, mandateId);
-//
-//  }
-
-  function populateChildMandates(container, mandateId) {
-    $.getJSON( mandateId + '/children', function( children ) {
+  function populateChildMandates(container, runId, mandateId) {
+    $.getJSON( '/data/run/' + runId + '/' + mandateId + '/children', function( children ) {
       $.each(children, function(n, child) {
-        var m = new Mandate(child);
+        var m = new Mandate(runId, child);
 
         var details = m.elements.details;
 
         // recursively add the children of this mandate (if it's a composite).  Add its log otherwise.
         if ( child.composite ) {
-          populateChildMandates(details, child.id);
-        } else {
-          var log = new Log(child.id);
-          details.append(log.elements.root);
-
-          // TODO: eventually have the logs load just-in-time when the leaf mandate is expanded instead of all at once.
-          $.get( child.id + '/log', function( text ) {
-            log.appendText(text);
-          });
-
+          populateChildMandates(details, runId, child.id);
         }
 
         container.append(m.elements.mandate);
@@ -521,17 +529,176 @@ var Jibe = new function() {
   }
 
   // Builds the mandate structure (which doesn't change between runs)
-  function initializeMandateStructure(run) {
+  function initializeMandateStructure(runId, run) {
     $('#runId').text(run.startTime);
 
     var mandates = $('#mandates');
     mandates.empty();
-    populateChildMandates(mandates, 'm0'); // TODO: load children just-in-time when the mandate is expanded.
+    populateChildMandates(mandates, runId, 'm0'); // TODO: load children just-in-time when the mandate is expanded.
+  }
+
+  function initializeRun(runId) {
+    $.getJSON('/data/run/' + runId + '/run', function( run ) {
+      initializeMandateStructure(runId, run);
+    })
   }
 
   this.initialize = function() {
-    $.getJSON( "run", function( run ) {
-      initializeMandateStructure(run);
-    })
+    var pageId = document.location.href;
+    pageId = pageId.replace(/\/$/,'').replace(/.*\//,'');
+
+    if ( pageId == 'latest' ) {
+      $.getJSON('/data/runs?limit=1', function( run ) {
+        initializeRun(run[0].description);
+      })
+    } else {
+      initializeRun(pageId);
+    }
   }
+
+  this.getIconClassForStatus = function(status) {
+    switch ( status ) {
+      case 'PENDING' : return 'fa-clock-o';
+      case 'RUNNING' : return 'fa-gear fa-spin';
+      case 'UNNEEDED': return 'fa-times';
+      case 'FAILURE' : return 'fa-exclamation';
+      case 'SUCCESS' : return 'fa-check';
+      case 'NEEDED'  : return 'fa-check';
+      case 'BLOCKED' : return 'fa-ban';
+    }
+  }
+
+  this.updateRunList = function(limit, offset) {
+    limit = limit || 20
+    offset = offset || 0
+
+    var now = moment();
+
+    var params = $.param({
+      limit: limit,
+      offset: offset,
+    });
+
+    function df(m) {
+      return m.format('MM/DD/YYYY hh:mm:ss a');
+    }
+
+/*
+    function pad(n, width) {
+      var add = width - Math.floor(Math.log10(n)) - 1;
+      return "0".repeat(add) + n;
+    }
+
+    function age2(ms) {
+      var w, d, h, m, s, f;
+      s = Math.floor(ms / 1000);
+      f = ms % 1000;
+      m = Math.floor(s / 60);
+      s = s % 60;
+      h = Math.floor(m / 60);
+      m = m % 60;
+      d = Math.floor(h / 24);
+      h = h % 24;
+      w = Math.floor(d / 7);
+      d = d % 7;
+
+
+      if ( w > 0 || d > 0 ) {
+        var s = moment(now - ms);
+        return s.fromNow(true);
+      } else {
+        var out = '';
+        if ( h > 0 ) out += pad(h,2) + ':';
+        if ( m > 0 ) out += pad(m,2) + ':';
+        out += pad(s,2) + '.' + pad(f,3);
+        return out;
+      }
+    }
+*/
+
+    function age(ms) {
+      var w, d, h, m, s, f;
+      s = Math.floor(ms / 1000);
+      f = ms % 1000;
+      m = Math.floor(s / 60);
+      s = s % 60;
+      h = Math.floor(m / 60);
+      m = m % 60;
+      d = Math.floor(h / 24);
+      h = h % 24;
+      w = Math.floor(d / 7);
+      d = d % 7;
+
+      var out = '';
+
+      if ( w > 0 )
+        out += w + " w";
+      if ( d > 0 )
+        out += ' ' + d + 'd';
+      if ( h > 0 )
+        out += ' ' + h + 'h';
+      if ( m > 0 )
+        out += ' ' + m + 'm';
+      if ( s > 0 )
+        out += ' ' + s + 's';
+      if ( f > 0 )
+        out += ' ' + f + 'ms';
+
+      return out;
+    }
+
+    $.getJSON('/data/runs?' + params, function( data ) {
+      var runs = $("table#runs");
+
+      $.each(data, function(n, run) {
+        var dateParts = run.description.split('-');
+        var date = new Date(dateParts[0],dateParts[1] - 1,dateParts[2],dateParts[3],dateParts[4],dateParts[5],dateParts[6]);
+        var timestamp = moment(date);
+
+        var icon = $('<i>', {
+          class: 'fa ' + Jibe.getIconClassForStatus(run.executiveStatus)
+        });
+
+        var runtime = $('<span>');
+
+        if ( run.endTime && run.startTime ) {
+          var sm = moment(run.startTime);
+          var em = moment(run.endTime);
+          runtime.text(age(em.diff(sm)));
+          runtime.attr('title', df(sm) + ' - ' + df(em) );
+        } else if ( run.startTime ) {
+          var sm = moment(run.startTime);
+          runtime.text(age(now.diff(sm)));
+          runtime.attr('title', df(sm) + ' - ');
+        }
+
+        var trash = $('<i>', {
+          class: 'fa fa-trash-o'
+        })
+        .click(function() {
+          if ( confirm('Do you really want to delete the results from run "' + run.description + '"?') )
+            alert("You can't actually do that yet.");
+        });
+
+        function link() {
+          return $('<a>', { href: '/' + run.description + '/' });
+        }
+
+        var e =
+          $('<tr>', {
+            class: 'mandate ' + run.executiveStatus,
+          }).append([
+            $('<td class="icon">').append(link().append(icon)),
+            $('<td>').append(link().text(df(timestamp))),
+            $('<td>').append(link().text(timestamp.calendar())),
+            $('<td>').append(link().text(timestamp.fromNow())),
+            $('<td class="runtime">').append(link().append(runtime)),
+            $('<td>').append(trash),
+          ])
+
+        e.appendTo( runs );
+      });
+    });
+  }
+
 };
