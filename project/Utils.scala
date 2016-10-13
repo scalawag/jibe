@@ -6,6 +6,36 @@ import Keys._
 
 object Utils {
 
+  implicit class MacroSupport(val project: Project) {
+    // Customize all configurations to enable macros to compile before the main bulk of the source.
+    val CustomMacro = config("macro")
+    val CustomCompile = config("compile") extend(CustomMacro)
+    val CustomRuntime = config("runtime") extend(CustomCompile)
+    val CustomTest = config("test") extend(CustomRuntime)
+    val CustomIntegrationTest = config("it") extend(CustomRuntime)
+
+    def compileMacros: Project = {
+      project.settings(
+        // Make all of our custom configurations work the way their namesakes do.
+        inConfig(CustomMacro)(Defaults.compileSettings),
+        inConfig(CustomCompile)(Defaults.compileSettings),
+        inConfig(CustomRuntime)(Defaults.configSettings),
+        inConfig(CustomTest)(Defaults.testSettings),
+        inConfig(CustomIntegrationTest)(Defaults.testSettings),
+        // Don't know what this does or why it is needed, but it is.
+        inConfig(CustomMacro)(classpathConfiguration := CustomCompile),
+        inConfig(CustomRuntime)(classpathConfiguration := Runtime),
+        inConfig(CustomTest)(classpathConfiguration := Test),
+        inConfig(CustomIntegrationTest)(classpathConfiguration := IntegrationTest),
+        // Include macro config classes in the main jar built out of the compile config classes.
+        inConfig(CustomCompile)(products ++= ( products in CustomMacro ).value),
+        // Get rid of classifier on the artifact built by our new "compile" config (otherwise, it's "compile").
+        artifact in (CustomCompile, packageBin) ~= ( _.copy(classifier = None) )
+      )
+      .overrideConfigs(CustomMacro, CustomCompile, CustomRuntime, CustomTest, CustomIntegrationTest)
+    }
+  }
+
   implicit class DoNotPublish(val project: Project) extends AnyVal {
     def doNotPublish: Project = {
       project.settings(
@@ -16,8 +46,7 @@ object Utils {
   }
 
   // DSL for adding remote deps like local deps.
-  implicit def p2remote(p: Project): RemoteDepHelper = new RemoteDepHelper(p)
-  final class RemoteDepHelper(p: Project) {
+  implicit class RemoteDepHelper(p: Project) {
     def dependsOnRemote(ms: ModuleID*): Project = p.settings(libraryDependencies ++= ms)
   }
 
@@ -28,8 +57,7 @@ object Utils {
       unmanagedSourceDirectories in Test <<= (unmanagedSourceDirectories in Test, baseDirectory) { (srcDirs, base) => (base / dir / "src/test/scala") +: srcDirs })
   }
 
-  implicit def p2source(p: Project): SourceDepHelper = new SourceDepHelper(p)
-  final class SourceDepHelper(p: Project) {
+  implicit class SourceDepHelper(p: Project) {
     def dependsOnSource(dir: String): Project =
       p.settings(Utils.dependsOnSource(dir):_*)
   }
