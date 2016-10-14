@@ -98,6 +98,25 @@ object Main {
 
       Executive.execute(job)
 
+      {
+        import org.scalawag.jibe.report.ExecutiveStatus._
+        def color(s: Value) = s match {
+          case FAILURE => Console.RED
+          case BLOCKED => Console.MAGENTA
+          case SUCCESS => Console.GREEN
+          case NEEDED => Console.CYAN
+          case UNNEEDED => Console.YELLOW
+        }
+
+        println("Overall run: " + color(job.executiveStatus) + job.executiveStatus)
+        val leafStatusCounts = ParentMandateJob.getChildLeafStatusCounts(job.status)
+        Seq(UNNEEDED, NEEDED, SUCCESS, FAILURE, BLOCKED) foreach { s =>
+          leafStatusCounts.get(s) foreach { n =>
+            println(s"  ${color(s)}${s}: $n")
+          }
+        }
+      }
+
     } catch {
       case ex: AbortException => // System.exit(1) - bad within sbt
     } finally {

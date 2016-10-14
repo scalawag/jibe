@@ -196,6 +196,13 @@ object ParentMandateJob {
     }
   }
 
+  def getChildLeafStatusCounts(status: MandateStatus) =
+    if ( status.composite ) {
+      status.leafStatusCounts.get
+    } else {
+      Map(status.executiveStatus -> 1)
+    }
+
   def addMap[K](l: Map[K, Int], r: Map[K, Int]): Map[K, Int] =
     ( l.keySet ++ r.keySet ) flatMap { k =>
       val sum = l.getOrElse(k, 0) + r.getOrElse(k, 0)
@@ -207,6 +214,8 @@ object ParentMandateJob {
 
   def subtractMap[K](l: Map[K, Int], r: Map[K, Int]): Map[K, Int] = addMap(l, r.mapValues(-_))
 }
+
+import ParentMandateJob._
 
 private[backend]
 abstract class ParentMandateJob(val children: Seq[MandateJob]) extends MandateJob {
@@ -231,13 +240,6 @@ abstract class ParentMandateJob(val children: Seq[MandateJob]) extends MandateJo
     case seq => Some(seq.max)
   }
 
-  private[this] def getChildLeafStatusCounts(status: MandateStatus) =
-    if ( status.composite ) {
-      status.leafStatusCounts.get
-    } else {
-      Map(status.executiveStatus -> 1)
-    }
-
   // Listen to all children for change events so that we can update our status when they change.
 
   children.foreach(_.addChangeListener(this.childStatusChanged))
@@ -245,7 +247,6 @@ abstract class ParentMandateJob(val children: Seq[MandateJob]) extends MandateJo
   private[this] def childStatusChanged(child: MandateJob,
                                        oldStatus: MandateStatus,
                                        newStatus: MandateStatus) = synchronized {
-    import ParentMandateJob._
 
     // Incorporate this child's status into our status.
     _status.mutate { r =>
@@ -312,7 +313,7 @@ class CompositeMandateJob(override val id: String,
                           val commander: Commander,
                           override val takeAction: Boolean)
   extends ParentMandateJob({
-    ParentMandateJob.zipWithIndexAndDirName(mandate.mandates).toSeq map { case (m, n, d) =>
+    zipWithIndexAndDirName(mandate.mandates).toSeq map { case (m, n, d) =>
       MandateJob(s"${id}_${n}", dir / d, m, commander, takeAction)
     }
   })
@@ -323,7 +324,7 @@ class RunMandateJob(override val id: String,
                     override val mandate: RunMandate,
                     override val takeAction: Boolean)
   extends ParentMandateJob(
-    ParentMandateJob.zipWithIndexAndDirName(mandate.mandates).toSeq map { case (m, n, d) =>
+    zipWithIndexAndDirName(mandate.mandates).toSeq map { case (m, n, d) =>
       MandateJob(s"${id}_${n}", dir / d, m, m.commander, takeAction)
     }
   )
