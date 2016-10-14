@@ -17,12 +17,17 @@ trait MandateJob {
   val mandate: Mandate
   val takeAction: Boolean
 
+  private[this] def fingerprint(m: Mandate): String = m match {
+    case x: CompositeMandateBase => DigestUtils.md5Hex(x.mandates.map(fingerprint).mkString).toLowerCase
+    case x => DigestUtils.md5Hex(x.toString).toLowerCase
+  }
+
   protected[this] var status: FileBackedStatus[MandateStatus, _] =
     new FileBackedStatus(dir / "mandate.js",
       MandateStatus(
         id,
         mandate.toString,
-        DigestUtils.md5Hex(mandate.toString).toLowerCase,
+        fingerprint(mandate),
         mandate.description,
         mandate.isInstanceOf[CompositeMandateBase],
         takeAction
