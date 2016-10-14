@@ -9,7 +9,7 @@ case class MandateStatus(id: String,
                          startTime: Option[Long] = None,
                          endTime: Option[Long] = None,
                          executiveStatus: ExecutiveStatus.Value = ExecutiveStatus.PENDING,
-                         childStatusCounts: Option[Map[ExecutiveStatus.Value, Int]] = None)
+                         leafStatusCounts: Option[Map[ExecutiveStatus.Value, Int]] = None)
 
 object ExecutiveStatus extends Enumeration {
   val PENDING  = Value // action has not yet started

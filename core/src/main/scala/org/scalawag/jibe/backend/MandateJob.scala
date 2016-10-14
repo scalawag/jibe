@@ -22,7 +22,7 @@ trait MandateJob {
     case x => DigestUtils.md5Hex(x.toString).toLowerCase
   }
 
-  protected[this] var status: FileBackedStatus[MandateStatus, _] =
+  protected[this] val _status: FileBackedStatus[MandateStatus, _] =
     new FileBackedStatus(dir / "mandate.js",
       MandateStatus(
         id,
@@ -34,9 +34,10 @@ trait MandateJob {
       )
     )
 
-  def executiveStatus = status.get.executiveStatus
+  def status = _status.get
+  def executiveStatus = _status.get.executiveStatus
   def executiveStatus_=(es: ExecutiveStatus.Value) = {
-    status.mutate(_.copy(executiveStatus = es))
+    _status.mutate(_.copy(executiveStatus = es))
   }
 
   // This basically maintains its own list of listeners and filters out messages that don't include executiveStatus
@@ -57,7 +58,7 @@ trait MandateJob {
     }
 
   // register for lower-level change events
-  status.addChangeListener(fireStatusChange _)
+  _status.addChangeListener(fireStatusChange _)
 }
 
 object MandateJob {
@@ -109,10 +110,10 @@ trait LeafMandateJob extends MandateJob {
     }
 
   def go() = {
-    if ( status.get.executiveStatus != ExecutiveStatus.PENDING )
+    if ( _status.get.executiveStatus != ExecutiveStatus.PENDING )
       throw new IllegalStateException(s"MandateJob $this has already been started")
 
-    status.mutate(_.copy(startTime = Some(System.currentTimeMillis), executiveStatus = ExecutiveStatus.RUNNING))
+    _status.mutate(_.copy(startTime = Some(System.currentTimeMillis), executiveStatus = ExecutiveStatus.RUNNING))
 
     val mec = MandateExecutionContext(commander, log)
 
@@ -133,9 +134,9 @@ trait LeafMandateJob extends MandateJob {
           ExecutiveStatus.FAILURE
       }
 
-    status.mutate(_.copy(endTime = Some(System.currentTimeMillis), executiveStatus = outcome))
+    _status.mutate(_.copy(endTime = Some(System.currentTimeMillis), executiveStatus = outcome))
 
-    status.get
+    _status.get
   }
 }
 
@@ -187,16 +188,37 @@ case class StatefulMandateJob[A](override val id: String,
   }
 }
 
+object ParentMandateJob {
+  def zipWithIndexAndDirName[A <: Mandate](ms: Iterable[A]): Iterable[(A, Int, String)] = {
+    val width = math.log10(ms.size).toInt + 1
+    ms.zipWithIndex map { case (m, n) =>
+      val subdir = s"%0${width}d".format(n) + m.description.map(s => "_" + s.replaceAll("\\W+", "_")).getOrElse("")
+      (m, n, subdir)
+    }
+  }
+
+  def addMap[K](l: Map[K, Int], r: Map[K, Int]): Map[K, Int] =
+    ( l.keySet ++ r.keySet ) flatMap { k =>
+      val sum = l.getOrElse(k, 0) + r.getOrElse(k, 0)
+      if ( sum == 0 )
+        None
+      else
+        Some(k -> sum)
+    } toMap
+
+  def subtractMap[K](l: Map[K, Int], r: Map[K, Int]): Map[K, Int] = addMap(l, r.mapValues(-_))
+}
+
 private[backend]
 abstract class ParentMandateJob(val children: Seq[MandateJob]) extends MandateJob {
-  private[this] var childrenReported = 0
+  // initialize the leaf job state counts to all PENDING
 
-  // initialize the child job state counts to all PENDING
-  status.mutate(_.copy(childStatusCounts = Some(Map(ExecutiveStatus.PENDING -> children.size))))
-
-  children.foreach(_.addChangeListener(this.childStatusChanged))
+  _status.mutate(_.copy(leafStatusCounts = Some(
+    children.map(_.status).map(getChildLeafStatusCounts).reduce(ParentMandateJob.addMap[ExecutiveStatus.Value])
+  )))
 
   // Keep track of the earliest start time and latest end time in case the events arrive from our children out of order.
+
   private[this] var earliestChildStartTime: Option[Long] = None
   private[this] var latestChildEndTime: Option[Long] = None
 
@@ -210,21 +232,31 @@ abstract class ParentMandateJob(val children: Seq[MandateJob]) extends MandateJo
     case seq => Some(seq.max)
   }
 
+  private[this] def getChildLeafStatusCounts(status: MandateStatus) =
+    if ( status.composite ) {
+      status.leafStatusCounts.get
+    } else {
+      Map(status.executiveStatus -> 1)
+    }
+
+  // Listen to all children for change events so that we can update our status when they change.
+
+  children.foreach(_.addChangeListener(this.childStatusChanged))
+
   private[this] def childStatusChanged(child: MandateJob,
                                        oldStatus: MandateStatus,
                                        newStatus: MandateStatus) = synchronized {
-    status.mutate { r =>
-      val oldChildStatus = oldStatus.executiveStatus
-      val newChildStatus = newStatus.executiveStatus
+    import ParentMandateJob._
 
-      // Incorporate this child's report into our report.
+    // Incorporate this child's status into our status.
+    _status.mutate { r =>
 
-      // Update child status counts...
+      // Update leaf status counts...
+      val oldChildLeafStatusCounts = getChildLeafStatusCounts(oldStatus)
+      val newChildLeafStatusCounts = getChildLeafStatusCounts(newStatus)
 
-      val newChildStatusCounts = {
-        val m = r.childStatusCounts.get
-        m + ( oldChildStatus -> ( m(oldChildStatus) - 1 ) ) + ( newChildStatus -> ( m.getOrElse(newChildStatus, 0) + 1 ) )
-      }
+      val newLeafStatusCounts =
+        addMap(subtractMap(r.leafStatusCounts.get, oldChildLeafStatusCounts), newChildLeafStatusCounts)
 
       // Assign a parent status based on the childrens' statuses. The precendence of child statuses wrt parent
       // status is defined below.  This means that if a parent's childrens' statuses include two different items in
@@ -239,7 +271,7 @@ abstract class ParentMandateJob(val children: Seq[MandateJob]) extends MandateJo
 
       val precedence = Seq(FAILURE, BLOCKED, RUNNING, PENDING, SUCCESS, NEEDED, UNNEEDED)
 
-      val newExecutiveStatus = precedence.find( s => newChildStatusCounts.get(s).exists(_ > 0) ).get
+      val newExecutiveStatus = precedence.find( s => newLeafStatusCounts.get(s).exists(_ > 0) ).get
 
       // Update our earliest child start and latest child end times so that we'll have them when we need them.
       this.earliestChildStartTime = earliest(this.earliestChildStartTime, newStatus.startTime)
@@ -248,7 +280,7 @@ abstract class ParentMandateJob(val children: Seq[MandateJob]) extends MandateJo
       // Set the parent start time to the child start time if this event makes it so that no children are pending.
       // TODO: can we count on always receiving the earliest start time first?
       val newStartTime =
-        if ( newChildStatusCounts.getOrElse(PENDING, 0) < children.size )
+        if ( newLeafStatusCounts.getOrElse(PENDING, 0) < children.size )
           this.earliestChildStartTime
         else
           None
@@ -257,7 +289,7 @@ abstract class ParentMandateJob(val children: Seq[MandateJob]) extends MandateJo
       // TODO: can we count on always receiving the latest start time last?
 
       val newEndTime =
-        if ( ( newChildStatusCounts.getOrElse(RUNNING, 0) + newChildStatusCounts.getOrElse(PENDING, 0) ) == 0 )
+        if ( ( newLeafStatusCounts.getOrElse(RUNNING, 0) + newLeafStatusCounts.getOrElse(PENDING, 0) ) == 0 )
           this.latestChildEndTime
         else
           None
@@ -268,18 +300,8 @@ abstract class ParentMandateJob(val children: Seq[MandateJob]) extends MandateJo
         startTime = newStartTime,
         endTime = newEndTime,
         executiveStatus = newExecutiveStatus,
-        childStatusCounts = Some(newChildStatusCounts)
+        leafStatusCounts = Some(newLeafStatusCounts)
       )
-    }
-  }
-}
-
-object ParentMandateJob {
-  def zipWithIndexAndDirName[A <: Mandate](ms: Iterable[A]): Iterable[(A, Int, String)] = {
-    val width = math.log10(ms.size).toInt + 1
-    ms.zipWithIndex map { case (m, n) =>
-      val subdir = s"%0${width}d".format(n) + m.description.map(s => "_" + s.replaceAll("\\W+", "_")).getOrElse("")
-      (m, n, subdir)
     }
   }
 }
