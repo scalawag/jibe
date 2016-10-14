@@ -29,8 +29,7 @@ trait MandateJob {
         mandate.toString,
         fingerprint(mandate),
         mandate.description,
-        mandate.isInstanceOf[CompositeMandateBase],
-        takeAction
+        mandate.isInstanceOf[CompositeMandateBase]
       )
     )
 

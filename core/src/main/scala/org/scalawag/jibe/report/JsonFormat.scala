@@ -14,5 +14,5 @@ object JsonFormat {
   }
 
   implicit object mosFormat extends EnumerationFormat[ExecutiveStatus.Value](ExecutiveStatus)
-  implicit val mandateStatusFormat = jsonFormat10(MandateStatus.apply)
+  implicit val mandateStatusFormat = jsonFormat9(MandateStatus.apply)
 }
