@@ -15,7 +15,7 @@ val CustomTest = config("test") extend(CustomRuntime)
 val CustomIntegrationTest = config("it") extend(CustomRuntime)
 
 val commonSettings = Seq(
-  version := "1.0.0-SNAPSHOT",
+  version := "0.1-SNAPSHOT",
   organization := "org.scalawag",
   scalaVersion := "2.11.8",
   scalacOptions ++= Seq(
@@ -31,10 +31,18 @@ val commonSettings = Seq(
   resolvers ++= Seq (
     "JAnalyse Repository" at "http://www.janalyse.fr/repository/",
     Resolver.sonatypeRepo("releases")
-  )
+  ),
+  publishTo := {
+    val nexus = "https://oss.sonatype.org/"
+    if (version.value.trim.endsWith("SNAPSHOT"))
+      Some("snapshots" at nexus + "content/repositories/snapshots")
+    else
+      Some("releases"  at nexus + "service/local/staging/deploy/maven2")
+  }
 )
 
 val root = project.in(file("."))
+  .settings(commonSettings)
   .doNotPublish
   .aggregate(core)
 
