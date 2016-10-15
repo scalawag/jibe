@@ -38,6 +38,15 @@ val commonSettings = Seq(
       Some("snapshots" at nexus + "content/repositories/snapshots")
     else
       Some("releases"  at nexus + "service/local/staging/deploy/maven2")
+  },
+  credentials ++= {
+    // Travis CI will have the credentials in these environment variables, so this enables automated publishing.
+    for {
+      username <- Option(System.getenv().get("SONATYPE_USERNAME"))
+      password <- Option(System.getenv().get("SONATYPE_PASSWORD"))
+    } yield {
+      Credentials("Sonatype Nexus Repository Manager", "oss.sonatype.org", username, password)
+    }
   }
 )
 
