@@ -1,6 +1,8 @@
 # Jibe
 
 [![License](http://img.shields.io/:license-apache-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0.html)
+[![Build Status](https://travis-ci.org/scalawag/jibe.svg?branch=develop)](https://travis-ci.org/scalawag/jibe)
+[![Coverage Status](https://coveralls.io/repos/github/scalawag/jibe/badge.svg?branch=develop)](https://coveralls.io/github/scalawag/jibe?branch=develop)
 
 ## Getting Started
 
