@@ -47,7 +47,7 @@ val commonSettings = Seq(
     } yield {
       Credentials("Sonatype Nexus Repository Manager", "oss.sonatype.org", username, password)
     }
-  }
+  }.toSeq
 )
 
 val root = project.in(file("."))
