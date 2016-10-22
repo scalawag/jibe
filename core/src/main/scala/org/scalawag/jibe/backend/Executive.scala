@@ -209,7 +209,7 @@ object Executive {
           val job = leaf.job
           if ( job.executiveStatus == ExecutiveStatus.PENDING ) {
             val status = job.go()
-            if ( status.executiveStatus == Some(ExecutiveStatus.FAILURE) ) {
+            if ( status.executiveStatus == ExecutiveStatus.FAILURE ) {
               // process all successor jobs to the failed job
               graph.innerNodeTraverser(node).foreach { case successor =>
                 successor.value match {
