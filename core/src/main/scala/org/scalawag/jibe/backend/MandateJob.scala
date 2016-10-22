@@ -52,9 +52,7 @@ trait MandateJob {
     })
 
   private[this] def fireStatusChange(oldStatus: MandateStatus, newStatus: MandateStatus): Unit =
-    if ( oldStatus.executiveStatus != newStatus.executiveStatus ) {
-      statusChangeListeners.get.foreach(_.apply(this, oldStatus, newStatus))
-    }
+    statusChangeListeners.get.foreach(_.apply(this, oldStatus, newStatus))
 
   // register for lower-level change events
   _status.addChangeListener(fireStatusChange _)
@@ -294,7 +292,7 @@ abstract class ParentMandateJob(val children: Seq[MandateJob]) extends MandateJo
         else
           None
 
-      // There are still outstanding children.  Set anything we already know about from the above logic.
+      // Update our status with everything we now know from the above logic.
 
       r.copy(
         startTime = newStartTime,
