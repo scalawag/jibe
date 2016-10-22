@@ -49,19 +49,6 @@ object Main {
 
     val mandates2 = NoisyMandate
 
-    def dumpMandate(pw: PrintWriter, mandate: Mandate, depth: Int = 0): Unit = {
-      val prefix = "  " * depth
-
-      mandate match {
-        case cm: CompositeMandateBase =>
-          val desc = s"${cm.description.getOrElse("<unnamed composite>")}"
-          pw.println(prefix + desc)
-          cm.mandates.foreach(dumpMandate(pw, _, depth + 1))
-        case m =>
-          pw.println(prefix + m.description.getOrElse(m.toString))
-      }
-    }
-
     val mandates4 = new MandateSet(Some("A"), Seq(
       ExitWithArgument(1),
       ExitWithArgument(2),
