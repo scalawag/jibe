@@ -373,6 +373,12 @@ var Jibe = new function() {
 
     this.parseLine = function(line) {
       var parts = line.split('|');
+
+      // Handle |s in the actual text of the log line by replacing them.
+      if ( parts.length > 4 ) {
+        parts[3] = parts.slice(3).join('|');
+      }
+
       return {
         tag: parts[0],
         level: parts[1],
