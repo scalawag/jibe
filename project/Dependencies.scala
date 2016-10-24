@@ -3,6 +3,7 @@ import sbt._
 object Dependencies {
   val sbtVersion = "0.13.11"
 
+  val css = "com.github.japgolly.scalacss" %% "core" % "0.5.0"
   val jsch = "com.jcraft" % "jsch" % "0.1.54"
   val commonsCodec = "commons-codec" % "commons-codec" % "1.10"
   val scalateCore = "org.scalatra.scalate" %% "scalate-core" % "1.7.0"
@@ -37,5 +38,4 @@ object Dependencies {
 
   val scalatest = "org.scalatest" %% "scalatest" % "3.0.0"
   val scalamock = "org.scalamock" %% "scalamock-scalatest-support" % "3.3.0"
-
 }

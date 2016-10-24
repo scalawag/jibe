@@ -15,5 +15,5 @@ case class MandateSequence(override val description: Option[String], override va
 case class CommanderMandate(commander: Commander, val mandate: Mandate)
   extends CompositeMandateBase(Some(commander.toString), Seq(mandate))
 
-case class RunMandate(val timestamp: String, override val mandates: Seq[CommanderMandate])
-  extends CompositeMandateBase(Some(timestamp), mandates)
+case class RunMandate(override val mandates: Seq[CommanderMandate])
+  extends CompositeMandateBase(None, mandates)

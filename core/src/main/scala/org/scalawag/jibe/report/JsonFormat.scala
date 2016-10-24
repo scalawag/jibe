@@ -2,9 +2,8 @@ package org.scalawag.jibe.report
 
 import spray.json.{JsString, JsValue, RootJsonFormat}
 import spray.json._
-import DefaultJsonProtocol._
 
-object JsonFormat {
+object JsonFormat extends DefaultJsonProtocol {
   class EnumerationFormat[A](enum: Enumeration) extends RootJsonFormat[A] {
     def write(obj: A): JsValue = JsString(obj.toString)
     def read(json: JsValue): A = json match {
@@ -13,6 +12,7 @@ object JsonFormat {
     }
   }
 
-  implicit object mosFormat extends EnumerationFormat[ExecutiveStatus.Value](ExecutiveStatus)
+  implicit object executiveStatusFormat extends EnumerationFormat[ExecutiveStatus.Value](ExecutiveStatus)
   implicit val mandateStatusFormat = jsonFormat9(MandateStatus.apply)
+  implicit val runFormat = jsonFormat5(Run.apply)
 }

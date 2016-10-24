@@ -1,10 +1,14 @@
 package org.scalawag.jibe.backend
 
 import java.io.{File, PrintWriter}
+import java.text.SimpleDateFormat
 
 import org.scalawag.jibe.mandate._
 import org.scalawag.jibe.{AbortException, FileUtils, Logging}
-import org.scalawag.jibe.report.ExecutiveStatus
+import org.scalawag.jibe.report.{ExecutiveStatus, Run}
+import org.scalawag.jibe.report.JsonFormat._
+import spray.json._
+import FileUtils._
 
 import scala.annotation.tailrec
 import scalax.collection.Graph
@@ -127,8 +131,23 @@ object Executive {
     FileUtils.writeFileWithPrintWriter(out) { pw => pw.print(dot) }
   }
 
-  def execute(rootJob: MandateJob): Unit = {
-    val graph = buildGraph(rootJob)
+  private[this] val df = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS-'UTC'")
+
+  def execute(resultsDir: File, mandate: RunMandate, takeAction: Boolean): RunMandateJob = {
+    // Prepare the run directory and create the RunMandateJob
+
+    val now = System.currentTimeMillis
+    val id = df.format(now)
+    val runDir = resultsDir / id
+    val job = MandateJob(runDir, mandate, true)
+
+    // Mark this run directory's metadata (including schema version for backward compatibility)
+
+    writeFileWithPrintWriter(runDir / "run.js") { pw =>
+      pw.println(Run(1, now, id, takeAction).toJson.prettyPrint)
+    }
+
+    val graph = buildGraph(job)
 
     // Issue warnings about unmanaged resources.
     graph.nodes foreach { n: graph.NodeT =>
@@ -231,5 +250,7 @@ object Executive {
         case _ => // Ignore everything but leaf jobs
       }
     }
+
+    job
   }
 }

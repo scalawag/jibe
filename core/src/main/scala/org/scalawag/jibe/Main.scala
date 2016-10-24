@@ -1,15 +1,10 @@
 package org.scalawag.jibe
 
 import java.io.{File, PrintWriter}
-import java.text.SimpleDateFormat
-import java.util.Date
-
-import FileUtils._
 import org.scalawag.jibe.backend.ubuntu.UbuntuCommander
 import org.scalawag.jibe.backend._
 import org.scalawag.jibe.mandate._
 import org.scalawag.jibe.mandate.command.{User, Group}
-import org.scalawag.jibe.report.Model.Run
 
 object Main {
 
@@ -61,11 +56,7 @@ object Main {
     ))
 
     try {
-      val now = System.currentTimeMillis
-      val df = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS-'UTC'")
-      val dateString = df.format(now)
-
-      val runMandate = RunMandate(dateString, Seq(
+      val runMandate = RunMandate(Seq(
         CommanderMandate(commanders(0), mandates1),
         CommanderMandate(commanders(1), mandates2)
 //        ,
@@ -73,18 +64,7 @@ object Main {
 //        CommanderMandate(commanders(1), mandates4)
       ))
 
-      val runDir = new File("results") / dateString
-
-
-      // Mark this run directory's metadata (including schema version for backward compatibility)
-
-      writeFileWithPrintWriter(runDir / "run.js") { pw =>
-        pw.println(Run(1, new Date(now)).toJson.prettyPrint)
-      }
-
-      val job = MandateJob(runDir, runMandate, true)
-
-      Executive.execute(job)
+      val job = Executive.execute(new File("results"), runMandate, true)
 
       {
         import org.scalawag.jibe.report.ExecutiveStatus._

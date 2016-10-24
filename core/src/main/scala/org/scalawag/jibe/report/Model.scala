@@ -1,30 +1,27 @@
 package org.scalawag.jibe.report
 
-import java.text.SimpleDateFormat
-import java.util.{Date, TimeZone}
+case class Run(version: Int,
+               timestamp: Long,
+               id: String,
+               takeAction: Boolean,
+               mandate: Option[MandateStatus] = None)
 
-import spray.json._
+case class MandateStatus(id: String,
+                         mandate: String,
+                         fingerprint: String,
+                         description: Option[String],
+                         composite: Boolean,
+                         startTime: Option[Long] = None,
+                         endTime: Option[Long] = None,
+                         executiveStatus: ExecutiveStatus.Value = ExecutiveStatus.PENDING,
+                         leafStatusCounts: Option[Map[ExecutiveStatus.Value, Int]] = None)
 
-object Model extends DefaultJsonProtocol {
-
-  case class Run(version: Int, startTime: Date)
-  //    extends Ordered[Run] {
-  //    override def compare(that: Run) = this.startTime.getTime.compare(that.startTime.getTime)
-  //  }
-
-  val ISO8601DateFormat = {
-    val f = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSX")
-    f.setTimeZone(TimeZone.getTimeZone("UTC"))
-    f
-  }
-
-  implicit object dateFormat extends RootJsonFormat[Date] {
-    def write(obj: Date): JsValue = JsString(ISO8601DateFormat.format(obj.getTime))
-    def read(json: JsValue): Date = json match {
-      case JsString(str) => ISO8601DateFormat.parse(str)
-      case x => throw new RuntimeException(s"expecting a string in ISO8601 format: $x")
-    }
-  }
-
-  implicit val runFormat = jsonFormat2(Run.apply)
+object ExecutiveStatus extends Enumeration {
+  val PENDING  = Value // action has not yet started
+  val RUNNING  = Value // action has started but has not completed
+  val UNNEEDED = Value // action had already been taken, so none was taken
+  val NEEDED   = Value // action is needed, but no actions are being taken this run
+  val FAILURE  = Value // something failed (either test or action)
+  val BLOCKED  = Value // a prerequisite was not met due to failure
+  val SUCCESS  = Value // action was required, taken and completed successfully
 }

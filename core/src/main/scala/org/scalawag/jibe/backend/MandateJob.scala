@@ -65,8 +65,7 @@ object MandateJob {
     case m: CompositeMandateBase => new CompositeMandateJob(id, dir, m, commander, takeAction)
   }
 
-  def apply(dir: File, mandate: RunMandate, takeAction: Boolean) =
-    new RunMandateJob("m0", dir, mandate, takeAction)
+  def apply(dir: File, mandate: RunMandate, takeAction: Boolean) = new RunMandateJob(dir, mandate, takeAction)
 }
 
 private[backend]
@@ -216,7 +215,7 @@ object ParentMandateJob {
 import ParentMandateJob._
 
 private[backend]
-abstract class ParentMandateJob(val children: Seq[MandateJob]) extends MandateJob {
+abstract class ParentMandateJob(override val id: String, val children: Seq[MandateJob]) extends MandateJob {
   // initialize the leaf job state counts to all PENDING
 
   _status.mutate(_.copy(leafStatusCounts = Some(
@@ -310,19 +309,18 @@ class CompositeMandateJob(override val id: String,
                           override val mandate: CompositeMandateBase,
                           val commander: Commander,
                           override val takeAction: Boolean)
-  extends ParentMandateJob({
+  extends ParentMandateJob(id,
     zipWithIndexAndDirName(mandate.mandates).toSeq map { case (m, n, d) =>
       MandateJob(s"${id}_${n}", dir / d, m, commander, takeAction)
     }
-  })
+  )
 
 private[backend]
-class RunMandateJob(override val id: String,
-                    override val dir: File,
+class RunMandateJob(override val dir: File,
                     override val mandate: RunMandate,
                     override val takeAction: Boolean)
-  extends ParentMandateJob(
+  extends ParentMandateJob("m0",
     zipWithIndexAndDirName(mandate.mandates).toSeq map { case (m, n, d) =>
-      MandateJob(s"${id}_${n}", dir / d, m, m.commander, takeAction)
+      MandateJob(s"m0_${n}", dir / d, m, m.commander, takeAction)
     }
   )

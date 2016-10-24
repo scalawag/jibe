@@ -1,27 +1,70 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <link rel="stylesheet" href="http://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css"/>
+
+    <script src="/static/jquery-3.1.1.js"></script>
+    <script src="/static/jQueryRotate-2.3.js"></script>
+
+    <script type="text/javascript" src="/static/moment-2.15.1.min.js"></script>
+
+    <link rel="stylesheet" href="/static/fonts/font-awesome-4.6.3.css"/>
+
+    <link rel="stylesheet" href="/static/highlight-9.7.0-style-github.min.css"/>
+    <script type="text/javascript" src="/static/highlight-9.7.0-bash.min.js"></script>
+
+    <script type="text/javascript" src="/static/underscore.1.8.3.js"></script>
+    <script type="text/javascript" src="/static/backbone.1.3.3.js"></script>
+
     <link rel="stylesheet" type="text/css" href="/static/style.css"/>
-    <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.8.1/jquery.min.js"></script>
-    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.15.1/moment.min.js"></script>
-
-    <script type="text/javascript" src="/static/code.js"></script>
-    <script type="text/javascript" src="/static/run.js"></script>
-
-    <link rel="stylesheet" href="http://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.7.0/styles/github.min.css"/>
-    <script src="/static/highlight.bash.js"></script>
-
-    <script type="text/javascript">
-      $(function() {
-        Jibe.updateRunList();
-      });
-    </script>
+    <link rel="stylesheet" type="text/css" href="/style.css"/>
   </head>
   <body>
-    <div><a href="latest/">LATEST</a></div>
 
-    <table id="runs">
-    </table>
+    <div id="run-list">
+      <table>
+        <tr id="latest" class="entry" onclick="Jibe.selectLatest()">
+          <td class="selection"></td>
+          <td class="hover"></td>
+          <td class="icon"><i class="fa fa-refresh"></i></td>
+          <td class="text">
+            <div class="relative">Latest Run</div>
+          </td>
+        </tr>
+      </table>
+    </div>
+
+    <div id="run-header" class="mandate">
+      <table>
+        <tbody>
+          <tr>
+            <td id="run-details" rowspan="2">
+              <span id="run-status"><i class="fa"></i></span>
+              <span id="run-id"/>
+            </td>
+            <td id="filters" class="actions">
+              <span class="action-label">Filter:</span>
+              <span><i class="fa fa-clock-o toggle-on" status="pending" onclick="Jibe.clickFilter(this)"></i></span>
+              <span><i class="fa fa-gear toggle-on" status="running" onclick="Jibe.clickFilter(this)"></i></span>
+              <span><i class="fa fa-check toggle-on" status="success" onclick="Jibe.clickFilter(this)"></i></span>
+              <span><i class="fa fa-times toggle-on" status="unneeded" onclick="Jibe.clickFilter(this)"></i></span>
+              <span><i class="fa fa-exclamation toggle-on" status="failure" onclick="Jibe.clickFilter(this)"></i></span>
+            </td>
+          </tr>
+          <tr>
+            <td class="actions">
+              <span class="action-label">Show/Hide:</span>
+              <span><i class="fa fa-angle-double-up" onclick="Jibe.exposeNothing()" title="Collapse All"></i></span>
+              <span><i class="fa fa-angle-down" onclick="Jibe.exposeMandates()" title="Expand Mandates"></i></span>
+              <span><i class="fa fa-angle-double-down" onclick="Jibe.exposeLogs()" title="Expand All"></i></span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="mandate-tree"></div>
+
+    <script type="text/javascript" src="/static/jibe.js"></script>
+
   </body>
 </html>

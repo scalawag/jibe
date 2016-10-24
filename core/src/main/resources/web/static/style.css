@@ -3,8 +3,89 @@ html {
 }
 
 body {
-  min-width: 1000px;
+  margin: 0;
 }
+/*====================================================================================================================*
+* run-header settings
+*====================================================================================================================*/
+
+/* something */
+
+div#run-header table {
+  width: 100%;
+  height: 100%;
+  border-collapse: collapse;
+  border: 0;
+  min-width: 50em;
+}
+
+div#run-header tr {
+  padding: 0;
+  border: 0;
+}
+
+div#run-header td {
+  vertical-align: middle;
+  padding: 0;
+  border: 0;
+}
+
+div#run-header {
+  position: fixed;
+  top: 0px;
+  left: 10em;
+  height: 4em;
+  width: calc(100% - 10em);
+  background-color: #F0F0F0;
+  max-height: 4em;
+  border: 1px solid #CCCCCC;
+  z-index:90000;
+}
+
+div#mandate-tree {
+  position: fixed;
+  top: 4.5em;
+  left: 10.5em;
+  width: calc(100% - 11em);
+  height: calc(100% - 5em);
+  overflow-y: auto;
+  min-width: 50em;
+}
+
+div#run-header td#run-details {
+  padding-left: 1em;
+  font-weight: bold;
+  font-size: 200%;
+  text-align: left;
+}
+
+div#run-header td.actions {
+  text-align: right;
+//  vertical-align: middle;
+  margin-top: .5em;
+}
+
+div#run-header td.actions span {
+  padding-right: 1em;
+}
+
+div#run-header div.button.new-row {
+  clear: right;
+}
+
+div#run-header td.actions i {
+  cursor: pointer;
+}
+
+div#run-header td.actions i.toggle-on {
+  color: black;
+}
+
+div#run-header td.actions i.toggle-off {
+  color: #dddddd;
+}
+
+/* run list */
 
 table {
   border-collapse: collapse;
@@ -31,47 +112,60 @@ a {
   color: black;
 }
 
-tr.mandate.success,
-div.mandate.success > div.summary,
-div.mandate.needed > div.summary
+.summary.success,
+.summary.needed
 {
   background-color: #DFF2BF;
 }
 
-tr.mandate.failure,
-div.mandate.failure > div.summary {
+.summary.failure {
   background-color: #FFBABA;
 }
 
-tr.mandate.blocked,
-div.mandate.blocked > div.summary {
+.summary.blocked {
   background-color: #FFBABA;
 }
 
-tr.mandate.running,
-div.mandate.running > div.summary {
+.summary.running {
   background-color: #c3e6fc;
 }
 
-tr.mandate.unneeded,
-div.mandate.unneeded > div.summary {
+.summary.unneeded {
   background-color: #FEEFB3;
 }
 
-tr.mandate.pending,
-div.mandate.pending > div.summary {
+.summary.pending {
   background-color: #DDDDDD;
 }
 
-div.row {
-  width: 100%;
-  clear: both;
+div.mandate {
+  margin-top: 1px;
 }
 
-div.box {
-//  border: solid black 1pt;
-  padding-top: .5em;
-  padding-bottom: .5em;
+.details {
+  display: none;
+  margin-left: 1.5em;
+}
+
+.summary-holder {
+  position: relative;
+}
+
+.summary-spacer {
+  visibility: hidden;
+  padding: .5em;
+}
+
+.summary {
+  position: absolute;
+  top: 0px;
+  left: 0px;
+  right: 0px;
+  bottom: 0px;
+}
+
+.collapse-control {
+  padding: .5em;
 }
 
 div.collapser {
@@ -91,14 +185,24 @@ div.icon {
   text-align: center;
 }
 
-div.indent {
-  margin-left: 1.5em;
-}
-
 div.time {
   float: right;
   text-align: right;
   padding-right: 1em;
+}
+
+div.link {
+  float: right;
+  text-align: right;
+  padding: .5em;
+  padding-right: 1em;
+  display: table-cell;
+  vertical-align: middle;
+}
+
+div.link a {
+  display: inline-block;
+  vertical-align: middle;
 }
 
 div.outcome {
@@ -110,12 +214,9 @@ div.outcome {
 
 div.description {
   padding-left: .5em;
-  overflow: auto;
-}
-
-div.actions {
-  float: right;
-  padding-right: 1em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 div.right {
@@ -126,47 +227,12 @@ div.mono {
   padding-top: 0;
 }
 
-@keyframes spinup {
-  from { transform: rotate(90deg); }
-  to { transform: rotate(0deg); }
-}
-
-@keyframes spindown {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(90deg); }
-}
-
-div.spinup {
-  animation: spinup 200ms;
-}
-
-div.spindown {
-  animation: spindown 200ms;
-  animation-fill-mode: forwards;
-}
-
-div.actions i {
-  cursor: pointer;
-}
-
-div.actions i.toggle-on {
-  color: black;
-}
-
-div.actions i.toggle-off {
-  color: #dddddd;
-}
-
-div.mandate.hidden {
+div.mandate.filtered {
   display: none;
 }
 
-div.summary {
-  margin-top: 1px;
-}
-
-
 div.log {
+  margin-top: 1px;
   background: black;
   overflow: auto;
 }
@@ -283,4 +349,12 @@ div.log div.stack-trace div.line.stack-frame {
 
 .force-content:after {
   content: '\00a0';
+}
+
+div.location {
+  display: none;
+}
+
+div.command div.section.content {
+  display: none;
 }
