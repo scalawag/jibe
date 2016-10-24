@@ -46,6 +46,7 @@ val root = project.in(file("."))
 lazy val core = project
   .enablePlugins(JavaServerAppPackaging)
   .compileMacros
+  .configs(IntegrationTest)
   .settings(Defaults.itSettings)
   .settings(commonSettings)
   .settings(
