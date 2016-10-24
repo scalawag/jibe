@@ -3,7 +3,7 @@ language: scala
 script:
  - sbt clean coverage test coverageReport
  - sbt coverageAggregate
- - [ "$TRAVIS_PULL_REQUEST" == "false" ] && sbt publish
+ - '[ "$TRAVIS_PULL_REQUEST" == "false" ] && sbt publish'
 
 scala:
  - 2.11.8
