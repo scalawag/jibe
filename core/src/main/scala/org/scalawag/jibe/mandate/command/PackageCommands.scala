@@ -21,3 +21,10 @@ case class InstallPackage(pkg: Package) extends UnitCommand
 
 @CommandArgument
 case class UpdateAptGet(refreshInterval: Duration) extends UnitCommand
+
+@CommandArgument
+case class IsAptKeyInstalled(fingerprint: String) extends BooleanCommand
+
+@CommandArgument
+case class InstallAptKey(keyserver: String, fingerprint: String) extends UnitCommand
+

@@ -1,10 +1,11 @@
 package org.scalawag.jibe
 
-import java.io.{File, PrintWriter}
+import java.io.File
+import scala.concurrent.duration._
 import org.scalawag.jibe.backend.ubuntu.UbuntuCommander
 import org.scalawag.jibe.backend._
 import org.scalawag.jibe.mandate._
-import org.scalawag.jibe.mandate.command.{User, Group}
+import org.scalawag.jibe.mandate.command.{Group, UpdateAptGet, User}
 
 object Main {
 
@@ -55,16 +56,27 @@ object Main {
       ExitWithArgument(5)
     ))
 
+    val InstallSbt = MandateSequence(Some("install sbt"), Seq(
+      WriteRemoteFile(new File("/etc/apt/sources.list.d/sbt.list"), "deb https://dl.bintray.com/sbt/debian /"),
+      InstallAptKey("keyserver.ubuntu.com", "2EE0EA64E40A89B84B2DF73499E82A75642AC823"),
+      new StatelessMandate with MandateHelpers {
+        override val description = Some("update apt metadata")
+        override def takeAction(implicit context: MandateExecutionContext) = runCommand(UpdateAptGet(0.seconds))
+      },
+      InstallPackage("sbt")
+    ))
+
     try {
       val runMandate = RunMandate(Seq(
         CommanderMandate(commanders(0), mandates1),
-        CommanderMandate(commanders(1), mandates2)
+        CommanderMandate(commanders(1), InstallSbt)
 //        ,
 //        CommanderMandate(commanders(2), mandates1)
 //        CommanderMandate(commanders(1), mandates4)
       ))
 
       val job = Executive.execute(new File("results"), runMandate, true)
+
 
       {
         import org.scalawag.jibe.report.ExecutiveStatus._
