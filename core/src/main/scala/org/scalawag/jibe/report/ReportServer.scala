@@ -29,6 +29,8 @@ class ReportServer(port: Int = 8080, interface: String = "0.0.0.0") extends Simp
     override def accept(f: File) = f.isDirectory
   }
 
+  private[this] val watcher = new RunListWatcher(results)
+
   private[this] def getIndexFromDirName(name: String) = {
     val firstPart = name.takeWhile(_.isDigit)
     if ( firstPart.forall(_ == '0') ) 0 else firstPart.dropWhile(_ == '0').toInt
@@ -63,23 +65,6 @@ class ReportServer(port: Int = 8080, interface: String = "0.0.0.0") extends Simp
       }
     }
   }
-
-  private[this] def getRuns(limit: Int = Int.MaxValue, offset: Int = 0): Route =
-    complete {
-      if ( results.exists ) {
-        getSubdirsWithMandateStatus(results, true).flatMap { case (subdir, ms) =>
-          val runFile = subdir / "run.js"
-          if ( runFile.exists ) {
-            val run = Source.fromFile(runFile).mkString.parseJson.convertTo[Run]
-            Some(run.copy(mandate = Some(ms)))
-          } else {
-            None
-          }
-        }.drop(offset).take(limit).toList
-      } else {
-        StatusCodes.NotFound
-      }
-    }
 
   private[this] def getChildMandateStatuses(dir: File): Route =
     complete {
@@ -155,8 +140,10 @@ class ReportServer(port: Int = 8080, interface: String = "0.0.0.0") extends Simp
       pathPrefix("data") {
         respondWithHeader(`Cache-Control`(`no-cache`, `max-age`(0))) {
           path("runs") {
-            parameters('limit.as[Int] ? 100, 'offset.as[Int] ? 0) { (limit, offset) =>
-              getRuns(limit, offset)
+            extract(_ => watcher.getRunList()) { runList =>
+              conditional(EntityTag(runList.checksum), DateTime(runList.timestamp)) {
+                complete(runList.runs)
+              }
             }
           } ~
           pathPrefix("run" / Segment) { runId =>
