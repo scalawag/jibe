@@ -89,7 +89,7 @@ class RunListWatcher(resultsDir: File) {
         }
       } catch {
         case ex: Exception =>
-          log.warn(s"unable to treat directory as a valid run due to exception: $ex")
+          log.warn(s"unable to treat directory $subdir as a valid run due to exception: $ex")
           None
       }
     }
