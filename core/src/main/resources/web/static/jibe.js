@@ -445,7 +445,7 @@ var Jibe = new function() {
           </div>
           <div class="time" title="${timeTitle}">${time}</div>
           <div class="description">
-            <span class="force-content">${htmlEscape(status.description)}</span>
+            <span class="force-content">${htmlEscape(status.description || '')}</span>
           </div>
         </div>
       </div>
