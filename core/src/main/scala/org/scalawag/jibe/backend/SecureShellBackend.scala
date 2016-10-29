@@ -1,6 +1,7 @@
 package org.scalawag.jibe.backend
 
 import java.io._
+import java.util.concurrent.TimeoutException
 
 import MandateExecutionLogging._
 import org.scalawag.jibe.mandate.command.FileContent
@@ -79,6 +80,12 @@ class SecureShellBackend(ssh: SshInfo, sudo: Boolean = false, commandTimeout: Du
 
       while ( !c.isClosed && System.currentTimeMillis < expiryTime )
         Thread.sleep(100)
+
+      while ( !c.isClosed )
+        if ( System.currentTimeMillis < expiryTime )
+          Thread.sleep(100)
+        else
+          throw new TimeoutException("command took too long to complete")
 
       c.disconnect()
 
