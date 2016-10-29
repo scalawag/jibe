@@ -1,7 +1,7 @@
 package org.scalawag.jibe
 
 import org.scalawag.timber.api.Level.DEBUG
-import org.scalawag.timber.api.Logger
+import org.scalawag.timber.api.{ImmediateMessage, Logger}
 import org.scalawag.timber.backend.DefaultDispatcher
 import org.scalawag.timber.backend.dispatcher.Dispatcher
 import org.scalawag.timber.backend.dispatcher.configuration.dsl._
@@ -29,5 +29,5 @@ object Logging {
   val disp = new Dispatcher(config)
   DefaultDispatcher.set(disp)
 
-  val log = new Logger
+  val log = new Logger(tags = Set(ImmediateMessage))
 }
