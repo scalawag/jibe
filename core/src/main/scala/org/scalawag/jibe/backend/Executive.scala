@@ -213,10 +213,9 @@ object Executive {
       }
 
     graph.findCycle foreach { cycle =>
-      System.err.println(s"ERROR: Detected cycle within mandate graph:")
       val segments = pathToSegments(cycle.nodes)
-      segmentsToLines(segments).foreach(System.err.println)
-      throw new AbortException
+      val lines = segmentsToLines(segments)
+      throw new AbortException(s"ERROR: Detected cycle within mandate graph:\n${lines.mkString("\n")}")
     }
 
     // Actually perform the mandate executions. Ensure that we visit all leaves only after their predecessors have
