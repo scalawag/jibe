@@ -8,13 +8,9 @@ case class MultiTreeLeaf(mandate: Mandate,
 
   override val fingerprint = mandate.mandateFingerprint
 
-  def named(n: String): MultiTreeLeaf = this.copy(name = Some(n))
-  def unnamed: MultiTreeLeaf = this.copy(name = None)
+  def named(n: String) = this.copy(name = Some(n))
+  def unnamed = this.copy(name = None)
   def add(ds: MultiTreeDecoration*) = this.copy(decorations = this.decorations ++ ds)
   def remove(ds: MultiTreeDecoration*) = this.copy(decorations = this.decorations -- ds)
   def unadorned = this.copy(decorations = Set.empty)
-}
-
-object MultiTreeLeaf {
-  implicit def treeify(m: Mandate) = MultiTreeLeaf(m)
 }

@@ -1,10 +1,17 @@
 package org.scalawag.jibe
 
-import java.io.{File, PrintWriter}
+import java.io.File
+
+import FileUtils._
 import org.scalawag.jibe.backend.ubuntu.UbuntuCommander
 import org.scalawag.jibe.backend._
+import org.scalawag.jibe.executive.{CommanderMultiTree, ExecutionPlan, Executive}
 import org.scalawag.jibe.mandate._
-import org.scalawag.jibe.mandate.command.{User, Group}
+import org.scalawag.jibe.mandate.command.{Group, User}
+import org.scalawag.jibe.multitree.{MandateSequence, MandateSet}
+
+import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.duration.Duration
 
 object Main {
 
@@ -20,16 +27,16 @@ object Main {
     }
 
     def CreateEveryoneUser(name: String) =
-      new MandateSet(Some(s"create personal user: $name"), Seq(
+      MandateSet(s"create personal user: $name",
         CreateOrUpdateUser(name),
         AddUserToGroups(name, "everyone"),
         CreateOrUpdateGroup("everyone")
-      ))
+      )
 
     def AddUsersToGroup(group: String, users: String*) =
-      new MandateSequence(Some(s"add multiple users to group $group"), users.map(AddUserToGroups(_, group)))
+      MandateSequence(s"add multiple users to group $group", users.map(AddUserToGroups(_, group)):_*)
 
-    val mandates1 = new MandateSet(Some("do everything"), Seq(
+    val mandates1 = MandateSet("do everything",
       CreateEveryoneUser("ernie"),
       CreateEveryoneUser("bert"),
       AddUsersToGroup("bedroom", "ernie", "bert"),
@@ -41,31 +48,35 @@ object Main {
       WriteRemoteFileFromTemplate(new File("/tmp/another"), "<%@ val noun: String %>\ntesting the ${noun}", Map("noun" -> "waters")),
       InstallPackage(Package("vim")),
       ExitWithArgument(34)
-    ))
+    )
 
     val mandates2 = NoisyMandate
 
-    val mandates4 = new MandateSet(Some("A"), Seq(
+    val mandates4 = MandateSet("A",
       ExitWithArgument(1),
       ExitWithArgument(2),
-      new MandateSet(Some("B"), Seq(
+      MandateSet("B",
         ExitWithArgument(3),
         ExitWithArgument(4)
-      )),
+      ),
       ExitWithArgument(5)
-    ))
+    )
 
     try {
-      val runMandate = RunMandate(Seq(
-        CommanderMandate(commanders(0), mandates1),
-        CommanderMandate(commanders(1), mandates2)
+      val commanderMultiTrees = Seq(
+        CommanderMultiTree(commanders(0), mandates1),
+        CommanderMultiTree(commanders(1), mandates2)
 //        ,
-//        CommanderMandate(commanders(2), mandates1)
-//        CommanderMandate(commanders(1), mandates4)
-      ))
+//        CommanderMultiTree(commanders(2), mandates1)
+//        CommanderMultiTree(commanders(1), mandates4)
+      )
 
-      val job = Executive.execute(new File("results"), runMandate, true)
+      val plan = new ExecutionPlan(commanderMultiTrees)
 
+//      writeFileWithPrintWriter("graph.dot")(plan.toDot)
+
+      Await.result(Executive.execute(plan, new File("results"), true)(ExecutionContext.global), Duration.Inf)
+/*
       {
         import org.scalawag.jibe.report.ExecutiveStatus._
         def color(s: Value) = s match {
@@ -84,7 +95,7 @@ object Main {
           }
         }
       }
-
+*/
     } catch {
       case ex: AbortException => // System.exit(1) - bad within sbt
     } finally {

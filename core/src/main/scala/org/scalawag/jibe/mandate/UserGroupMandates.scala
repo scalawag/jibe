@@ -1,26 +1,41 @@
 package org.scalawag.jibe.mandate
 
-import org.scalawag.jibe.backend._
-import org.scalawag.jibe.multitree.MandateExecutionContext
+import org.scalawag.jibe.multitree._
 
-case class AddUserToGroups(user: String, groups: String*) extends StatelessMandate with MandateHelpers {
-  override val description = Some(s"add user to groups: $user -> ${groups.mkString(" ")}")
-  override def prerequisites = UserResource(user) :: groups.map(GroupResource).toList
+object AddUserToGroups {
+  case class AddUserToGroups(user: String, groups: String*) extends StatelessMandate with MandateHelpers {
+    override def isActionCompleted(implicit context: MandateExecutionContext) =
+      runCommand(command.IsUserInAllGroups(user, groups))
 
-  override def isActionCompleted(implicit context: MandateExecutionContext) =
-    runCommand(command.IsUserInAllGroups(user, groups))
+    override def takeAction(implicit context: MandateExecutionContext) =
+      runCommand(command.AddUserToGroups(user, groups))
+  }
 
-  override def takeAction(implicit context: MandateExecutionContext) =
-    runCommand(command.AddUserToGroups(user, groups))
+  def apply(user: String, groups: String*) = MultiTreeLeaf(
+    mandate = new AddUserToGroups(user, groups:_*),
+    name = Some(s"add user to groups: $user -> ${groups.mkString(" ")}"),
+    decorations = Set(
+      Prerequisites(UserResource(user)),
+      Prerequisites(groups.map(GroupResource))
+    )
+  )
 }
 
-case class RemoveUserFromGroups(user: String, groups: String*) extends StatelessMandate with MandateHelpers {
-  override val description = Some(s"remove user from groups: $user -> ${groups.mkString(" ")}")
-  override def prerequisites = Iterable(UserResource(user))
+object RemoveUserFromGroups {
+  case class RemoveUserFromGroups(user: String, groups: String*) extends StatelessMandate with MandateHelpers {
+    override def isActionCompleted(implicit context: MandateExecutionContext) =
+      ! runCommand(command.IsUserInAnyGroups(user, groups))
 
-  override def isActionCompleted(implicit context: MandateExecutionContext) =
-    ! runCommand(command.IsUserInAnyGroups(user, groups))
+    override def takeAction(implicit context: MandateExecutionContext) =
+      runCommand(command.RemoveUserFromGroups(user, groups))
+  }
 
-  override def takeAction(implicit context: MandateExecutionContext) =
-    runCommand(command.RemoveUserFromGroups(user, groups))
+  def apply(user: String, groups: String*) = MultiTreeLeaf(
+    mandate = new RemoveUserFromGroups(user, groups:_*),
+    name = Some(s"remove user from groups: $user -> ${groups.mkString(" ")}"),
+    decorations = Set(
+      Prerequisites(UserResource(user))
+//      ,Prerequisites(groups.map(GroupResource)) // TODO: should this require that the groups exist?
+    )
+  )
 }

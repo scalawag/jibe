@@ -13,3 +13,7 @@ trait MultiTree {
   def remove(ds: MultiTreeDecoration*): A
   def unadorned: A
 }
+
+object MultiTree {
+  implicit def treeify(m: Mandate) = MultiTreeLeaf(m)
+}

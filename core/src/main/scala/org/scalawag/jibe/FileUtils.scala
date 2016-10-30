@@ -43,6 +43,8 @@ object FileUtils {
     dir
   }
 
+  implicit def toFile(filename: String) = new File(filename)
+
   implicit class FilePimper(f:File) {
 
     def /(name:String): File = new File(f,name)
