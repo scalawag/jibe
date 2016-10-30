@@ -1,7 +1,6 @@
 package org.scalawag.jibe.multitree
 
 import org.scalawag.jibe.MD5
-import org.scalawag.jibe.mandate.MandateExecutionContext
 import org.scalawag.jibe.mandate.command.Command
 
 /** A Mandate is an operation that can be executed against a system.  It may be realized as a series of system-specific

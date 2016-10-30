@@ -2,6 +2,7 @@ package org.scalawag.jibe.mandate
 
 import scala.concurrent.duration._
 import org.scalawag.jibe.mandate.command.CommandArgument
+import org.scalawag.jibe.multitree.MandateExecutionContext
 
 @CommandArgument
 case class Package(name: String,

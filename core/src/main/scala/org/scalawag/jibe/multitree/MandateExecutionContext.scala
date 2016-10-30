@@ -1,4 +1,4 @@
-package org.scalawag.jibe.mandate
+package org.scalawag.jibe.multitree
 
 import org.scalawag.jibe.backend.Commander
 import org.scalawag.timber.api.Logger

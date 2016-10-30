@@ -1,6 +1,7 @@
 package org.scalawag.jibe.mandate
 
 import org.scalawag.jibe.mandate.command.Group
+import org.scalawag.jibe.multitree.MandateExecutionContext
 
 /** Creates the group with the specified attributes (if it does not already exist) or modifies the existing group such
   * that its attributes match those specified.  Any optional members of the {@link Group} argument will be defaulted

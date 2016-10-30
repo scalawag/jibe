@@ -3,8 +3,7 @@ package org.scalawag.jibe.executive
 import java.io.PrintWriter
 
 import org.scalawag.jibe.backend.{Commander, MandateExecutionLogging, RunnableGraph}
-import org.scalawag.jibe.mandate.MandateExecutionContext
-import org.scalawag.jibe.multitree._
+import org.scalawag.jibe.multitree.{MandateExecutionContext, _}
 import org.scalawag.jibe.report.Report._
 import org.scalawag.jibe.report._
 

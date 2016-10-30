@@ -1,6 +1,7 @@
 package org.scalawag.jibe.mandate
 
 import org.scalawag.jibe.mandate.command.User
+import org.scalawag.jibe.multitree.MandateExecutionContext
 
 case class CreateOrUpdateUser(user: User) extends StatelessMandate with MandateHelpers {
   override val description = Some(s"update user: ${user.name}")

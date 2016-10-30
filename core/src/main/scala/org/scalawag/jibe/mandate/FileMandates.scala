@@ -5,6 +5,7 @@ import java.io._
 import org.fusesource.scalate._
 import org.scalawag.jibe.backend._
 import org.scalawag.jibe.mandate.command._
+import org.scalawag.jibe.multitree.MandateExecutionContext
 
 abstract class WriteRemoteFileBase(val remotePath: File) extends Mandate with MandateHelpers {
   override def consequences = Iterable(FileResource(remotePath.getAbsolutePath))

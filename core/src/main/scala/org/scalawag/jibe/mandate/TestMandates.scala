@@ -1,5 +1,7 @@
 package org.scalawag.jibe.mandate
 
+import org.scalawag.jibe.multitree.MandateExecutionContext
+
 case object NoisyMandate extends StatelessMandate {
   override val description = Some("Make a lot of noise.")
 

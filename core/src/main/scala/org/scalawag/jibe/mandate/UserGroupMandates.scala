@@ -1,6 +1,7 @@
 package org.scalawag.jibe.mandate
 
 import org.scalawag.jibe.backend._
+import org.scalawag.jibe.multitree.MandateExecutionContext
 
 case class AddUserToGroups(user: String, groups: String*) extends StatelessMandate with MandateHelpers {
   override val description = Some(s"add user to groups: $user -> ${groups.mkString(" ")}")

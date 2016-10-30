@@ -2,9 +2,9 @@ package org.scalawag.jibe.backend.ubuntu
 
 import org.scalawag.jibe.backend._
 import org.scalawag.jibe.backend.bash.BashCommander
-import org.scalawag.jibe.mandate.MandateExecutionContext
 import org.scalawag.jibe.mandate.command.CommandArgument.ToStructure
 import org.scalawag.jibe.mandate.command._
+import org.scalawag.jibe.multitree.MandateExecutionContext
 
 case class UbuntuCommander(ssh: SshInfo, sudo: Boolean = false) extends SecureShellBackend(ssh, sudo) with Commander {
 

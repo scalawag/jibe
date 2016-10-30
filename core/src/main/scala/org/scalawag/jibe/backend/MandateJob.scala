@@ -7,6 +7,7 @@ import java.util.function.UnaryOperator
 import org.apache.commons.codec.digest.DigestUtils
 import org.scalawag.jibe.FileUtils._
 import org.scalawag.jibe.mandate._
+import org.scalawag.jibe.multitree.MandateExecutionContext
 import org.scalawag.jibe.report.{ExecutiveStatus, MandateStatus}
 import org.scalawag.jibe.report.JsonFormat._
 

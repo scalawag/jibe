@@ -1,7 +1,7 @@
 package org.scalawag.jibe.backend
 
-import org.scalawag.jibe.mandate.MandateExecutionContext
 import org.scalawag.jibe.mandate.command.{BooleanCommand, Command, UnitCommand}
+import org.scalawag.jibe.multitree.MandateExecutionContext
 
 import scala.util.{Failure, Success}
 
