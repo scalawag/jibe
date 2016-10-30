@@ -14,29 +14,29 @@ case class RunContext(takeAction: Boolean,
 
 // These are the things that we'll store in the ExecutionGraph.
 
-private[this] sealed trait Payload extends RunnableGraph.Payload[RunContext]
+private[executive] sealed trait Payload extends RunnableGraph.Payload[RunContext]
 
 // These are things that need to be reported on when a cycle is detected. Other things are immaterial.
 
-private[this] sealed trait CycleSegmentEnd extends Payload
+private[executive] sealed trait CycleSegmentEnd extends Payload
 
 // First, a set of payloads that don't do anything when they're encountered by the RunnableGraph.  They always succeed.
 
-private[this] sealed trait NoopPayload extends Payload {
+private[executive] sealed trait NoopPayload extends Payload {
   override def run(runContext: RunContext) = true
   override def abort(runContext: RunContext) = {}
 }
 
-private[this] case class BranchHead(branch: MultiTreeBranch) extends NoopPayload
-private[this] case class BranchTail(branch: MultiTreeBranch) extends NoopPayload
-private[this] case class CommanderHead(commanderMultiTree: CommanderMultiTree) extends NoopPayload
-private[this] case class CommanderTail(commanderMultiTree: CommanderMultiTree) extends NoopPayload
-private[this] case class ResourcePayload(resource: Resource) extends NoopPayload
-private[this] case class BarrierPayload(barrier: Barrier) extends NoopPayload with CycleSegmentEnd
-private[this] case object Start extends NoopPayload
-private[this] case object Finish extends NoopPayload
+private[executive] case class BranchHead(branch: MultiTreeBranch) extends NoopPayload
+private[executive] case class BranchTail(branch: MultiTreeBranch) extends NoopPayload
+private[executive] case class CommanderHead(commanderMultiTree: CommanderMultiTree) extends NoopPayload
+private[executive] case class CommanderTail(commanderMultiTree: CommanderMultiTree) extends NoopPayload
+private[executive] case class ResourcePayload(resource: Resource) extends NoopPayload
+private[executive] case class BarrierPayload(barrier: Barrier) extends NoopPayload with CycleSegmentEnd
+private[executive] case object Start extends NoopPayload
+private[executive] case object Finish extends NoopPayload
 
-private[this] case class Sequencer(val branch: MultiTreeBranch, val commander: Commander) extends NoopPayload {
+private[executive] case class Sequencer(val branch: MultiTreeBranch, val commander: Commander) extends NoopPayload {
   // There are going to be potentially many of these with the same arguments.  They each need to be distinct.
   override def equals(any: Any) = any match {
     case that: AnyRef => this eq that
@@ -46,7 +46,7 @@ private[this] case class Sequencer(val branch: MultiTreeBranch, val commander: C
 
 // This one actually does stuff because it represents a MultiTreeLeaf (that contains a Mandate).
 
-private[this] case class Leaf(leaf: MultiTreeLeaf, commander: Commander) extends Payload with CycleSegmentEnd {
+private[executive] case class Leaf(leaf: MultiTreeLeaf, commander: Commander) extends Payload with CycleSegmentEnd {
   private[this] def getReport(context: RunContext) = {
     val id = context.multiTreeIdMaps(commander).getId(leaf)
     context.reportsById(commander, id)

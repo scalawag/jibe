@@ -1,8 +1,14 @@
 package org.scalawag.jibe
 
 import java.io._
+import spray.json._
 
 object FileUtils {
+
+  def writeJson[A](f:File, jsonable: A)(implicit format: RootJsonFormat[A]) =
+    writeFileWithPrintWriter(f) { pw =>
+      pw.println(jsonable.toJson.prettyPrint)
+    }
 
   def writeFileWithOutputStream(f: File)(fn: OutputStream => Unit): Unit = {
     Option(f.getParentFile).foreach(mkdir)

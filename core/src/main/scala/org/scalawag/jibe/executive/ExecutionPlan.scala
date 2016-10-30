@@ -1,30 +1,21 @@
 package org.scalawag.jibe.executive
 
-import java.io.{File, PrintWriter}
-import java.text.SimpleDateFormat
-
-import org.scalawag.jibe.FileUtils._
+import java.io.PrintWriter
 import org.scalawag.jibe.backend.RunnableGraph._
 import org.scalawag.jibe.backend.{Commander, RunnableGraph}
 import org.scalawag.jibe.multitree.MultiTreeBranch.{Parallel, Series}
 import org.scalawag.jibe.multitree._
-import org.scalawag.jibe.report.JsonFormats._
-import org.scalawag.jibe.report.Report._
-import org.scalawag.jibe.report._
 import org.scalawag.jibe.AbortException
-import spray.json._
-
 import scala.annotation.tailrec
-import scala.concurrent.{ExecutionContext, Future}
 
 // Instantiation of this class causes the plan to be built from its commander-specific multi-trees.
 
-class ExecutionPlan(commanderMultiTrees: Seq[CommanderMultiTree]) {
+class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
 
   // Generate the MultiTree IDs that we'll need for the rest of the logic in here.  The IDs are unique within a
   // Commander-specific MultiTree, so this is really a map of maps, one for each commander.
 
-  private[this] val multiTreeIdMap = commanderMultiTrees.map { cm =>
+  val multiTreeIdMap = commanderMultiTrees.map { cm =>
     cm.commander -> new MultiTreeIdMap(cm.multiTree)
   }.toMap
 
@@ -230,7 +221,9 @@ class ExecutionPlan(commanderMultiTrees: Seq[CommanderMultiTree]) {
 
   // This is what actually creates and stores the RunnableGraph representing the input MultiTree.
 
-  private[this] val plan = planCommanderMultiTrees(commanderMultiTrees)
+  planCommanderMultiTrees(commanderMultiTrees)
+
+  val runnableGraph = graph // from var to val, from private to public
 
   private[this] def checkForCycles(root: PayloadVertex[RunContext, Payload], commander: Commander): Unit =
     graph.findCycle(root) foreach { cycle =>
