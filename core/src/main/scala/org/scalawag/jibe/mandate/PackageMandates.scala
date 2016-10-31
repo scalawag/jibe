@@ -32,3 +32,18 @@ object InstallPackage {
     decorations = Set[MultiTreeDecoration](Consequences(PackageResource(pkg.name)))
   )
 }
+
+object InstallAptKey {
+  case class InstallAptKey(keyserver: String, fingerprint: String) extends StatelessMandate with MandateHelpers {
+    override def isActionCompleted(implicit context: MandateExecutionContext) =
+      runCommand(command.IsAptKeyInstalled(fingerprint))
+
+    override def takeAction(implicit context: MandateExecutionContext) =
+      runCommand(command.InstallAptKey(keyserver, fingerprint))
+  }
+
+  def apply(keyserver: String, fingerprint: String) = MultiTreeLeaf(
+    mandate = new InstallAptKey(keyserver, fingerprint),
+    name = Some(s"install apt key: ${fingerprint}" )
+  )
+}
