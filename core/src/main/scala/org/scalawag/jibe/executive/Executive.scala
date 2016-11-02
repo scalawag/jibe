@@ -13,7 +13,7 @@ import scala.concurrent.{ExecutionContext, Future}
 object Executive {
   private[this] val df = new SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS-'UTC'")
 
-  def execute(plan: ExecutionPlan, resultsDir: File, takeAction: Boolean)(implicit ec: ExecutionContext): Future[Unit] = {
+  def execute(plan: ExecutionPlan, resultsDir: File, takeAction: Boolean)(implicit ec: ExecutionContext): Future[File] = {
 
     // Make sure this plan is valid before we even create a report directory.
 
@@ -85,6 +85,8 @@ object Executive {
 
     val runReport = createRunReport(runDir, plan.commanderMultiTrees)
 
-    plan.runnableGraph.run(RunContext(takeAction, plan.multiTreeIdMap, reportsById))
+    plan.runnableGraph.run(RunContext(takeAction, plan.multiTreeIdMap, reportsById)) map { _ =>
+      runDir
+    }
   }
 }

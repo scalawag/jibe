@@ -1,6 +1,6 @@
 package org.scalawag.jibe
 
-import java.io.File
+import java.io.{File, PrintWriter}
 
 import FileUtils._
 import org.scalawag.jibe.backend.ubuntu.UbuntuCommander
@@ -9,7 +9,8 @@ import org.scalawag.jibe.executive.{CommanderMultiTree, ExecutionPlan, Executive
 import org.scalawag.jibe.mandate._
 import org.scalawag.jibe.mandate.command.{Group, User}
 import org.scalawag.jibe.multitree.{MandateSequence, MandateSet}
-
+import org.scalawag.jibe.report.cli.TextReport
+import org.scalawag.jibe.report.cli.TextReport.TextReportOptions
 import scala.concurrent.{Await, ExecutionContext}
 import scala.concurrent.duration.Duration
 
@@ -75,27 +76,14 @@ object Main {
 
 //      writeFileWithPrintWriter("graph.dot")(plan.toDot)
 
-      Await.result(Executive.execute(plan, new File("results"), true)(ExecutionContext.global), Duration.Inf)
-/*
-      {
-        import org.scalawag.jibe.report.ExecutiveStatus._
-        def color(s: Value) = s match {
-          case FAILURE => Console.RED
-          case BLOCKED => Console.MAGENTA
-          case SUCCESS => Console.GREEN
-          case NEEDED => Console.CYAN
-          case UNNEEDED => Console.YELLOW
-        }
+      val runDir = Await.result(Executive.execute(plan, new File("results"), true)(ExecutionContext.global), Duration.Inf)
 
-        println("Overall run: " + color(job.executiveStatus) + job.executiveStatus)
-        val leafStatusCounts = ParentMandateJob.getChildLeafStatusCounts(job.status)
-        Seq(UNNEEDED, NEEDED, SUCCESS, FAILURE, BLOCKED) foreach { s =>
-          leafStatusCounts.get(s) foreach { n =>
-            println(s"  ${color(s)}${s}: $n")
-          }
-        }
-      }
-*/
+      val pw = new PrintWriter(System.out)
+      val report = new TextReport(pw, runDir, TextReportOptions(errorLogs = true))
+
+      report.renderReport()
+      pw.flush()
+
     } catch {
       case ex: AbortException => // System.exit(1) - bad within sbt
     } finally {
