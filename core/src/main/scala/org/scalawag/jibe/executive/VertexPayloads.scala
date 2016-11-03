@@ -26,12 +26,15 @@ private[executive] sealed trait NoopPayload extends Payload {
   override def abort(runContext: RunContext) = {}
 }
 
-private[executive] case class BranchHead(branch: MultiTreeBranch) extends NoopPayload
-private[executive] case class BranchTail(branch: MultiTreeBranch) extends NoopPayload
+// Some of the commander arguments are needed here (even though they're never accessed to ensure uniqueness across
+// commanders for the corresponding items in the RunnableGraph.
+
+private[executive] case class BranchHead(branch: MultiTreeBranch, commander: Commander) extends NoopPayload
+private[executive] case class BranchTail(branch: MultiTreeBranch, commander: Commander) extends NoopPayload
 private[executive] case class CommanderHead(commanderMultiTree: CommanderMultiTree) extends NoopPayload
 private[executive] case class CommanderTail(commanderMultiTree: CommanderMultiTree) extends NoopPayload
-private[executive] case class ResourcePayload(resource: Resource) extends NoopPayload
-private[executive] case class BarrierPayload(barrier: Barrier) extends NoopPayload with CycleSegmentEnd
+private[executive] case class ResourcePayload(resource: Resource, commander: Option[Commander]) extends NoopPayload
+private[executive] case class BarrierPayload(barrier: Barrier, commander: Option[Commander]) extends NoopPayload with CycleSegmentEnd
 private[executive] case object Start extends NoopPayload
 private[executive] case object Finish extends NoopPayload
 

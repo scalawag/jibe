@@ -82,11 +82,11 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
   }
 
   private[this] def planResource(c: Commander, r: Resource) = plannedResources.getOrCreate(r, c) {
-    RunnableGraph.PayloadVertex[RunContext, Payload](ResourcePayload(r))
+    RunnableGraph.PayloadVertex[RunContext, Payload](ResourcePayload(r, if ( r.scope == GlobalScope ) None else Some(c)))
   }
 
   private[this] def planBarrier(c: Commander, b: Barrier) = plannedBarriers.getOrCreate(b, c) {
-    RunnableGraph.PayloadVertex[RunContext, Payload](BarrierPayload(b))
+    RunnableGraph.PayloadVertex[RunContext, Payload](BarrierPayload(b, if ( b.scope == GlobalScope ) None else Some(c)))
   }
 
   private[this] def planLeaf(commander: Commander, leaf: MultiTreeLeaf) = {
@@ -104,8 +104,8 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
     plannedBranches.getOrCreate(id, commander) {
       // Create the in and out vertices for this branch.
 
-      val in = Vertex[RunContext, Payload](BranchHead(branch))
-      val out = Vertex[RunContext, Payload](BranchTail(branch))
+      val in = Vertex[RunContext, Payload](BranchHead(branch, commander))
+      val out = Vertex[RunContext, Payload](BranchTail(branch, commander))
 
       // recursively plan all of the contents
 
@@ -276,18 +276,18 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
       def toEnglish(segment: List[Payload]): Iterable[String] = segment match {
         case Leaf(pre, _) :: Sequencer(seq, _) :: Leaf(post, _) :: Nil =>
           Iterable(s"  ${leaf(pre)} must precede ${leaf(post)} due to series ordering in ${branch(seq)}")
-        case Leaf(pre, _) :: ResourcePayload(r) :: Leaf(post, _) :: Nil =>
+        case Leaf(pre, _) :: ResourcePayload(r, _) :: Leaf(post, _) :: Nil =>
           Iterable(s"  ${leaf(pre)} must precede ${leaf(post)} due to ${resource(r)}")
-        case BarrierPayload(b) :: Leaf(post, _) :: Nil =>
+        case BarrierPayload(b, _) :: Leaf(post, _) :: Nil =>
           Iterable(s"  ${barrier(b)} must precede ${leaf(post)} due to AfterBarrier decoration")
-        case Leaf(pre, _) :: BarrierPayload(b) :: Nil =>
+        case Leaf(pre, _) :: BarrierPayload(b, _) :: Nil =>
           Iterable(s"  ${leaf(pre)} must precede ${barrier(b)} due to BeforeBarrier decoration")
         case _ =>
           val lines =
             segment map { p => p match {
               case Leaf(l, _) => s"    ${leaf(l)}"
-              case BarrierPayload(b) => s"    ${barrier(b)}"
-              case ResourcePayload(r) => s"    ${resource(r)}"
+              case BarrierPayload(b, _) => s"    ${barrier(b)}"
+              case ResourcePayload(r, _) => s"    ${resource(r)}"
               case Sequencer(b, _) => s"    series sequencing node from ${branch(b)}"
               case _ => s"    $p"
             }}
@@ -336,17 +336,17 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
             Map("shape" -> "doublecircle", "label" -> "FINISH")
           case Leaf(l, c) =>
             Map("shape" -> "box", "style" -> "filled", "label" -> l.mandate.toString)
-          case BranchHead(b) =>
+          case BranchHead(b, _) =>
             Map("shape" -> "cds", "style" -> "filled", "color" -> "green", "label" -> b.name.getOrElse("?"))
-          case BranchTail(b) =>
+          case BranchTail(b, _) =>
             Map("shape" -> "cds", "style" -> "filled", "color" -> "green", "label" -> b.name.getOrElse("?"), "shape" -> "cds", "orientation" -> 180)
           case CommanderHead(c) =>
             Map("shape" -> "cds", "style" -> "filled", "color" -> "purple", "label" -> c.commander.toString, "shape" -> "cds")
           case CommanderTail(c) =>
             Map("shape" -> "cds", "style" -> "filled", "color" -> "purple", "label" -> c.commander.toString, "shape" -> "cds", "orientation" -> 180)
-          case BarrierPayload(b) =>
+          case BarrierPayload(b, _) =>
             Map("style" -> "filled", "color" -> "yellow", "label" -> b.name.getOrElse("?"))
-          case ResourcePayload(r) =>
+          case ResourcePayload(r, _) =>
             Map("style" -> "filled", "color" -> "yellow", "label" -> r.toString)
           case _: Sequencer =>
             Map("shape" -> "point")
