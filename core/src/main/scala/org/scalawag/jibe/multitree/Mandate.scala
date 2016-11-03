@@ -19,13 +19,6 @@ trait Mandate {
   // functionality for non-case classes.
 
   val mandateFingerprint = MD5(s"${getClass.getName}:${hashCode}")
-
-  // Set this to true if your mandate does something that you may want to do several distinct times with the same
-  // arguments during a run on a single commander.  If this is false, all instances with the same fingerprint will
-  // be treated as duplicates. A example is "apt-get update", which you may want to run several distinct times.
-
-  val allowMultipleDistinctEqualInstancesPerRun = false
-
 }
 
 trait StatelessMandate extends Mandate {
@@ -46,4 +39,11 @@ trait MandateHelpers {
   }
 
   protected[this] def caseClassFingerprint = Some
+}
+
+trait OnlyIdentityEquals {
+  override def equals(any: Any) = any match {
+    case that: AnyRef => this eq that
+    case _ => false
+  }
 }

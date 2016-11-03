@@ -2,12 +2,12 @@ package org.scalawag.jibe.multitree
 
 import scala.annotation.tailrec
 
-// Assigns a unique ID to each distinct MultiTree recursively.  Note that "distinct" depends on the setting of
-// Mandate.allowMultipleDistinctEqualInstancesPerRun for each Mandate involved.  For those, multiple equal
-// instances can appear as distinct.
+// Assigns a unique ID to each "distinct" MultiTree recursively.  Distinctness is based on the Object.equals method.
+// If you want to use the same Mandate with the same arguments more than once within the same run, you need to ensure
+// that they are not equal.  Refer to OnlyIdentityEquals.
 
 class MultiTreeIdMap(root: MultiTree) {
-  private[this] val (distinctTreeMap, nonDistinctTreeMap, idMap) = {
+  private[this] val idsByTree = {
     var nextSerial = Map.empty[String, Int]
 
     def nextSerialFor(fingerprint: String): Int = {
@@ -16,12 +16,9 @@ class MultiTreeIdMap(root: MultiTree) {
       serial
     }
 
-    // These are vars for the three maps that we're going to return.  Once we finish with the initialization
-    // inside this block, they're vals and immutable.
+    // Once we finish with the initialization inside this block, this becomes a val (and remains immutable).
 
-    var distinctTreeMap = Map.empty[Int, MultiTreeId]
-    var nonDistinctTreeMap = Map.empty[String, MultiTreeId]
-    var idMap = Map.empty[MultiTreeId, MultiTree]
+    var idsByTree = Map.empty[MultiTree, MultiTreeId]
 
     @tailrec
     def walkTree(trees: List[MultiTree]): Unit = trees match {
@@ -29,53 +26,24 @@ class MultiTreeIdMap(root: MultiTree) {
       case Nil =>
         // NOOP, stop recursing
 
-      case (branch: MultiTreeBranch) :: rest =>
-        val key = branch.fingerprint
-        if ( ! nonDistinctTreeMap.contains(key) ) {
-          val fingerprint = branch.fingerprint
+      case multiTree :: rest =>
+        if ( ! idsByTree.contains(multiTree) ) {
+          val fingerprint = multiTree.fingerprint
           val serial = nextSerialFor(fingerprint)
           val id = MultiTreeId(fingerprint, serial)
-          nonDistinctTreeMap += ( key -> id )
-          idMap += ( id -> branch )
+          idsByTree += ( multiTree -> id )
         }
-        walkTree(rest ++ branch.contents)
 
-      case (leaf: MultiTreeLeaf) :: rest if leaf.mandate.allowMultipleDistinctEqualInstancesPerRun =>
-        val key = System.identityHashCode(leaf.mandate)
-        if ( ! distinctTreeMap.contains(key) ) {
-          val fingerprint = leaf.fingerprint
-          val serial = nextSerialFor(fingerprint)
-          val id = MultiTreeId(fingerprint, serial)
-          distinctTreeMap += ( key -> id )
-          idMap += ( id -> leaf )
+        multiTree match {
+          case branch: MultiTreeBranch => walkTree(rest ++ branch.contents)
+          case leaf: MultiTreeLeaf => walkTree(rest)
         }
-        walkTree(rest)
-
-      case (leaf: MultiTreeLeaf) :: rest =>
-        val key = leaf.fingerprint
-        if ( ! nonDistinctTreeMap.contains(key) ) {
-          val fingerprint = leaf.fingerprint
-          val serial = nextSerialFor(fingerprint)
-          val id = MultiTreeId(fingerprint, serial)
-          nonDistinctTreeMap += ( key -> id )
-          idMap += ( id -> leaf )
-        }
-        walkTree(rest)
     }
 
     walkTree(List(root))
 
-    (distinctTreeMap, nonDistinctTreeMap, idMap)
+    idsByTree
   }
 
-  def all = idMap
-
-  def getId(tree: MultiTree) = tree match {
-    case b: MultiTreeBranch =>
-      nonDistinctTreeMap(b.fingerprint)
-    case l: MultiTreeLeaf if l.mandate.allowMultipleDistinctEqualInstancesPerRun =>
-      distinctTreeMap(System.identityHashCode(l.mandate))
-    case l: MultiTreeLeaf =>
-      nonDistinctTreeMap(l.fingerprint)
-  }
+  def getId(tree: MultiTree) = idsByTree(tree)
 }
