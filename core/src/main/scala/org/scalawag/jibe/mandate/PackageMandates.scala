@@ -12,7 +12,6 @@ object Package {
   def apply(name: String, version: String): Package = new Package(name, Some(version))
 }
 
-@CommandArgument
 case class InstallPackage(pkg: Package) extends StatelessMandate with MandateHelpers {
   override val description = Some(s"install package: ${pkg.name}" )
 
@@ -27,4 +26,14 @@ case class InstallPackage(pkg: Package) extends StatelessMandate with MandateHel
     runCommand(command.UpdateAptGet(1.day))
     runCommand(command.InstallPackage(pkg))
   }
+}
+
+case class InstallAptKey(keyserver: String, fingerprint: String) extends StatelessMandate with MandateHelpers {
+  override val description = Some(s"install apt key: ${fingerprint}" )
+
+  override def isActionCompleted(implicit context: MandateExecutionContext) =
+    runCommand(command.IsAptKeyInstalled(fingerprint))
+
+  override def takeAction(implicit context: MandateExecutionContext) =
+    runCommand(command.InstallAptKey(keyserver, fingerprint))
 }
