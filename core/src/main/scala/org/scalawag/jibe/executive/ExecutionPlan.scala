@@ -78,7 +78,7 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
   // createFn specified.
 
   private[this] def planSemaphore(c: Commander, s: Semaphore) = plannedSemaphores.getOrCreate(s, c) {
-    RunnableGraph.SemaphoreVertex[RunContext, Payload](s.count)
+    RunnableGraph.SemaphoreVertex[RunContext, Payload](s.count, s.name)
   }
 
   private[this] def planResource(c: Commander, r: Resource) = plannedResources.getOrCreate(r, c) {
