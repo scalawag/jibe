@@ -267,28 +267,6 @@ class RunnableGraph[R, P <: Payload[R]](val vertices: Set[Vertex[R, P]] = Set.em
         }
         synchronized(unusedSemaphoreEdgesOut -= from)
       }
-
-      def verifyEmptiness(): Unit = {
-        if ( unusedSemaphoreEdgesOut.nonEmpty || unusedSemaphoreEdgesIn.nonEmpty ) {
-          val inSemaphoreEdgesString =
-            for {
-              (to, froms) <- unusedSemaphoreEdgesIn
-              from <- froms
-            } yield {
-              s"$to <- $from"
-            } mkString("\n  in-edges:\n  ","\n  ","")
-
-          val outSemaphoreEdgesString =
-            for {
-              (from, tos) <- unusedSemaphoreEdgesOut
-              to <- tos
-            } yield {
-              s"$from -> $to"
-            } mkString("\n  out-edges:\n  ","\n  ","")
-
-          throw new IllegalStateException(s"Not all edges were traversed during the run.  This is a bug.  These edges remain:$inSemaphoreEdgesString$outSemaphoreEdgesString")
-        }
-      }
     }
 
     private[this] object vertexStates {
@@ -332,7 +310,6 @@ class RunnableGraph[R, P <: Payload[R]](val vertices: Set[Vertex[R, P]] = Set.em
       val f: Future[Set[Try[UniqueReturn]]] = afterAllFlat(roots.map(run))
       f map { _ =>
         unusedEdgeMap.verifyEmptiness()
-        unusedSemaphores.verifyEmptiness()
         vertexStates.verifyCompleteness()
       }
     }
