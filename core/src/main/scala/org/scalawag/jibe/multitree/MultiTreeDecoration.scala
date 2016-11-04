@@ -37,9 +37,9 @@ object Consequences {
   def apply(rs: Iterable[Resource]*): Consequences = new Consequences(rs.flatten.toSet)
 }
 
-class Semaphore(val count: Int,
-                val name: Option[String] = None,
-                override val scope: Scope = CommanderScope) extends Scoped
+case class Semaphore(val count: Int,
+                     val name: Option[String] = None,
+                     override val scope: Scope = CommanderScope) extends Scoped with OnlyIdentityEquals
 
 case class EnterCriticalSection(semaphore: Semaphore) extends MultiTreeDecoration
 case class ExitCriticalSection(semaphore: Semaphore) extends MultiTreeDecoration
