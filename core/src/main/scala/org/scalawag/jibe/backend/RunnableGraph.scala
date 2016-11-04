@@ -11,6 +11,7 @@ import scala.collection.generic.CanBuildFrom
 import scala.concurrent.{ExecutionContext, Future}
 import org.scalawag.jibe.Logging.log
 import org.scalawag.jibe.backend.RunnableGraph._
+import org.scalawag.jibe.multitree.OnlyIdentityEquals
 
 object RunnableGraph {
   trait Payload[-R] {
@@ -21,7 +22,7 @@ object RunnableGraph {
   sealed trait Element[-R, +P <: Payload[R]]
   sealed trait Vertex[-R, +P <: Payload[R]] extends Element[R, P]
   case class PayloadVertex[-R, +P <: Payload[R]](payload: P) extends Vertex[R, P]
-  case class SemaphoreVertex[-R, +P <: Payload[R]](permits: Int, name: Option[String] = None) extends Vertex[R, P]
+  case class SemaphoreVertex[-R, +P <: Payload[R]](permits: Int, name: Option[String] = None) extends Vertex[R, P] with OnlyIdentityEquals
 
   object Vertex {
     def apply[R, P <: Payload[R]](payload: P) = new PayloadVertex[R, P](payload)
