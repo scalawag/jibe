@@ -30,14 +30,20 @@ object Report {
   }
 
   /* Each report has an "attributes" object and a "status" object. The attributes are immutable and are determined by
-   * the object that the report regards.  The status is always a ReportStatus, is mutable and changes as the object or its
-   * children are run, reflecting the progress and outcome.
+   * the object that the report regards.  The status is always a ReportStatus, is mutable and changes as the object or
+   * its children are run, reflecting the progress and outcome.
+   *
+   * The extra "status" field of the Attributes classes is just so that the UI can easily include a single JSON back
+   * from requests.  It's not actually written to disk as part of the report.
    */
 
   case class RunReportAttributes(version: Int,
                                  timestamp: Long,
                                  id: String,
-                                 takeAction: Boolean)
+                                 takeAction: Boolean,
+                                 // Only used by ReportServer code.
+                                 commanders: Option[List[String]] = None,
+                                 status: Option[ReportStatus] = None)
 
   case class CommanderReportAttributes(description: String,
                                        root: MultiTreeId)

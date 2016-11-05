@@ -78,7 +78,7 @@ var Jibe = new function() {
 
     //------------------------------------------------------------------------------------------------------------------
 
-    this.Mandate = Backbone.Model.extend({
+    this.MultiTree = Backbone.Model.extend({
       url: function() {
         return `/data/run/${model.selectedRun.get.id}/${this.id}/status`
       },
@@ -118,7 +118,7 @@ var Jibe = new function() {
     //------------------------------------------------------------------------------------------------------------------
 
     var MandateChildren = Backbone.Collection.extend({
-      model: model.Mandate,
+      model: model.MultiTree,
       initialize: function(models, options) {
         this.parentMandateId = options.parentMandateId;
       },
@@ -186,10 +186,10 @@ var Jibe = new function() {
     // TODO: update the relative timestamps periodically
     var m = moment(run.timestamp);
     var e = $(`
-      <tr id="${run.id}" class="entry ${run.mandate.executiveStatus}">
+      <tr id="${run.id}" class="entry ${run.status.status}">
         <td class="selection"></td>
         <td class="hover"></td>
-        <td class="icon"><i class="fa ${Jibe.getIconClassForStatus(run.mandate.executiveStatus)}"></i></td>
+        <td class="icon"><i class="fa ${Jibe.getIconClassForStatus(run.status.status)}"></i></td>
         <td class="text">
           <div class="relative">${m.fromNow()}</div>
           <div class="timestamp">${formatDate(m)}</div>
@@ -323,7 +323,7 @@ var Jibe = new function() {
       this.detailsElt.append(this.log.elements.root);
     }
 
-    // The Mandate model that we're listening to and rendering.  This value must be set by setModel() to ensure
+    // The MultiTree model that we're listening to and rendering.  This value must be set by setModel() to ensure
     // that the event listening is properly wired.  This should also get the initial state of the model (and the
     // log for our view).
 
@@ -397,7 +397,7 @@ var Jibe = new function() {
     this.updateSummaryElement();
   }
 
-  // Create the summary and details structure (which doesn't change throughout the life of this Mandate.  Only the
+  // Create the summary and details structure (which doesn't change throughout the life of this MultiTree.  Only the
   // strings and classes will change from now on.  This intentionally does not have access to the status because I
   // want to make sure that the updateSummary() is used to redraw everything when a new status is passed in.
 
@@ -884,7 +884,7 @@ var Jibe = new function() {
   //        $('<div>', {
   //          class: level + ' line ' + tag,
   //          title: timestamp,
-  //        }).text('Mandate Call: ' + text);
+  //        }).text('MultiTree Call: ' + text);
   //
   //      this.appendElement(e);
   //      break;
@@ -1041,7 +1041,7 @@ var Jibe = new function() {
 
     model.selectedRun.on('change', function(n) {
       if ( n )
-        model.rootMandate.set(new model.Mandate({id: 'm0'}));
+        model.rootMandate.set(new model.MultiTree({id: 'm0'}));
       else
         model.rootMandate.set(undefined);
     });
