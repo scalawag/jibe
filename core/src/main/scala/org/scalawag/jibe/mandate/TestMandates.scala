@@ -1,8 +1,8 @@
 package org.scalawag.jibe.mandate
 
-case object NoisyMandate extends StatelessMandate {
-  override val description = Some("Make a lot of noise.")
+import org.scalawag.jibe.multitree.{OnlyIdentityEquals, MandateExecutionContext, MandateHelpers, StatelessMandate}
 
+case object NoisyMandate extends StatelessMandate {
   override def isActionCompleted(implicit context: MandateExecutionContext) = {
     import context._
 
@@ -23,9 +23,7 @@ case object NoisyMandate extends StatelessMandate {
     }
 }
 
-case class ExitWithArgument(exitCode: Int) extends StatelessMandate with MandateHelpers {
-  override val description = Some(s"exit with $exitCode")
-
+case class ExitWithArgument(exitCode: Int) extends StatelessMandate with MandateHelpers with OnlyIdentityEquals {
   override def isActionCompleted(implicit context: MandateExecutionContext) = {
     import context._
     val ec = runCommand(command.ExitWithArgument(exitCode))

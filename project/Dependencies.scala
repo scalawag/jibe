@@ -8,6 +8,7 @@ object Dependencies {
   val commonsCodec = "commons-codec" % "commons-codec" % "1.10"
   val scalateCore = "org.scalatra.scalate" %% "scalate-core" % "1.7.0"
   val scalaXml = "org.scala-lang" % "scala-xml" % "2.11.0-M4"
+  val druthers = "org.scalawag.druthers" %% "druthers" % "0.1.0"
   val macroParadise = compilerPlugin("org.scalamacros" % "paradise" % "2.1.0" cross CrossVersion.full)
 
   object graph {

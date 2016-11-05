@@ -17,6 +17,7 @@ object Logging {
   implicit private val MyEntryFormatter = new ProgrammableEntryFormatter(Seq(
     entry.timestamp formattedWith HumanReadableTimestampFormatter,
     entry.level formattedWith NameLevelFormatter,
+    entry.threadName,
     entry.sourceLocation
   ))
 

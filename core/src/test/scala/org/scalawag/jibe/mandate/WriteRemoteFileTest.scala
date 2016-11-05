@@ -8,7 +8,7 @@ import org.scalatest.{FunSpec, Matchers}
 class WriteRemoteFileTest extends FunSpec with MandateTest with Matchers with MockFactory {
   val content = command.FileContent("hello")
   val destination = new File("/tmp/destination")
-  val mandate = WriteRemoteFile(destination, content)
+  val mandate = new WriteRemoteFile.WriteRemoteFile(destination, content)
 
   val lengthTest = command.IsRemoteFileLength(destination, content.length)
   val md5Test = command.IsRemoteFileMD5(destination, content.md5)

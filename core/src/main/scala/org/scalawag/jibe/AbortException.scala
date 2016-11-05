@@ -1,3 +1,3 @@
 package org.scalawag.jibe
 
-class AbortException extends Exception
+case class AbortException(message: String) extends Exception(message)

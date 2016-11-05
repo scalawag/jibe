@@ -33,7 +33,7 @@ object Sessions {
       config.put("StrictHostKeyChecking", "no")
       s.setConfig(config)
 
-      s.connect(30) // TODO: configurable
+      s.connect(30000) // TODO: configurable
 
       sessions += ssh -> s
 

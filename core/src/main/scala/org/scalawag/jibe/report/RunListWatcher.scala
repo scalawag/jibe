@@ -3,15 +3,18 @@ package org.scalawag.jibe.report
 import java.io.{File, FileFilter}
 import java.nio.file.{FileSystems, Path, WatchEvent}
 import java.util.concurrent.atomic.AtomicReference
+
 import org.scalawag.jibe.FileUtils._
 import org.apache.commons.codec.digest.DigestUtils
 import org.scalawag.jibe.Logging._
+import org.scalawag.jibe.report.Report.{ReportStatus, RunReportAttributes}
+import org.scalawag.jibe.report.JsonFormats._
+
 import scala.io.Source
 import spray.json._
-import JsonFormat._
 
 object RunListWatcher {
-  case class RunList(checksum: String, timestamp: Long, runs: Seq[Run])
+  case class RunList(checksum: String, timestamp: Long, runs: Seq[RunReportAttributes])
 }
 
 class RunListWatcher(resultsDir: File) {
@@ -74,16 +77,16 @@ class RunListWatcher(resultsDir: File) {
 
     val runs = resultsDir.listFiles(dirFilter).sortBy(_.getName).reverse.flatMap { subdir =>
       try {
-        val mandateFile = subdir / "mandate.js"
+        val statusFile = subdir / "status.js"
         val runFile = subdir / "run.js"
-        if ( mandateFile.exists && runFile.exists ) {
-          val run = Source.fromFile(runFile).mkString.parseJson.convertTo[Run]
-          val mandate = Source.fromFile(mandateFile).mkString.parseJson.convertTo[MandateStatus]
+        if ( statusFile.exists && runFile.exists ) {
+          val run = Source.fromFile(runFile).mkString.parseJson.convertTo[RunReportAttributes]
+          val status = Source.fromFile(statusFile).mkString.parseJson.convertTo[ReportStatus]
 
           // Begin watching this directory for changes to the two new significant files.
           watch(subdir)
 
-          Some(run.copy(mandate = Some(mandate)))
+          Some(run.copy(status = Some(status)))
         } else {
           None
         }

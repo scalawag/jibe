@@ -1,5 +1,6 @@
-package org.scalawag.jibe.mandate
+package org.scalawag.jibe.multitree
 
+import org.scalawag.jibe.MD5
 import org.scalawag.jibe.mandate.command.Command
 
 /** A Mandate is an operation that can be executed against a system.  It may be realized as a series of system-specific
@@ -11,9 +12,13 @@ import org.scalawag.jibe.mandate.command.Command
   */
 
 trait Mandate {
-  val description: Option[String] = None
-  def prerequisites: Iterable[Resource] = Iterable.empty
-  def consequences: Iterable[Resource] = Iterable.empty
+
+  // Should be the same across runs for any mandate with the same behavior.  Right now, this uses class name and
+  // hashCode to mean that a mandate with the same class and the same arguments is the same mandate.  The hash code
+  // works this way because all the current mandates are case classes.  It has to be overridden to provide similar
+  // functionality for non-case classes.
+
+  val mandateFingerprint = MD5(s"${getClass.getName}:${hashCode}")
 }
 
 trait StatelessMandate extends Mandate {
@@ -31,5 +36,14 @@ trait StatefulMandate[A] extends Mandate {
 trait MandateHelpers {
   protected[this] def runCommand[A](command: Command[A])(implicit context: MandateExecutionContext) = {
     context.commander.execute(command)
+  }
+
+  protected[this] def caseClassFingerprint = Some
+}
+
+trait OnlyIdentityEquals {
+  override def equals(any: Any) = any match {
+    case that: AnyRef => this eq that
+    case _ => false
   }
 }

@@ -57,6 +57,7 @@ lazy val core = project
     akka.slf4j,
     commonsCodec,
     css,
+    druthers,
     graph.core,
     graph.dot,
     jsch,

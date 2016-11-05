@@ -1,12 +1,72 @@
 package org.scalawag.jibe
 
 import java.io.{File, PrintWriter}
+
 import org.scalawag.jibe.backend.ubuntu.UbuntuCommander
 import org.scalawag.jibe.backend._
+import org.scalawag.jibe.executive.{CommanderMultiTree, ExecutionPlan, Executive}
 import org.scalawag.jibe.mandate._
-import org.scalawag.jibe.mandate.command.{User, Group}
+import org.scalawag.jibe.mandate.command.{Group, User}
+import org.scalawag.jibe.multitree._
+import FileUtils._
+import org.scalawag.jibe.report.cli.TextReport
+import org.scalawag.jibe.report.cli.TextReport.TextReportOptions
+
+import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.duration._
 
 object Main {
+
+  // A few custom mandates for installing java software
+
+  object UpdateAptGet {
+    case class UpdateAptGet() extends StatelessMandate with MandateHelpers with OnlyIdentityEquals {
+      override def takeAction(implicit context: MandateExecutionContext) = runCommand(command.UpdateAptGet(0.seconds))
+    }
+
+    def apply() = MultiTreeLeaf(new UpdateAptGet(), Some("update apt metadata"))
+  }
+
+  // Ad hoc scripting in a mandate
+  val AcceptJava8License = MultiTreeLeaf (
+    new StatelessMandate with MandateHelpers {
+      override def isActionCompleted(implicit context: MandateExecutionContext) =
+      context.commander.executeBooleanScript(
+      """PATH=/bin:/usr/bin
+        |debconf-show oracle-java8-installer | grep '* shared/accepted-oracle-license-v1-1: true'
+      """.stripMargin.trim
+      )
+
+      override def takeAction(implicit context: MandateExecutionContext) =
+      context.commander.execute(
+      """PATH=/bin:/usr/bin
+        |echo oracle-java8-installer shared/accepted-oracle-license-v1-1 select true | /usr/bin/debconf-set-selections
+      """.stripMargin.trim
+      )
+    },
+    Some("Accept Java 8 license")
+  )
+
+  val usesAptDatabase = CriticalSection(Semaphore(1, Some("apt")))
+
+  def InstallJava8(updateAptGet: MultiTreeLeaf = UpdateAptGet()) =
+    MandateSequence("Install Java 8",
+      WriteRemoteFile("/etc/apt/sources.list.d/webupd8team-java-trusty.list",
+                      "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main"),
+      InstallAptKey("keyserver.ubuntu.com", "7B2C3B0889BF5709A105D03AC2518248EEA14886"),
+      updateAptGet.add(usesAptDatabase),
+      AcceptJava8License,
+      InstallPackage("oracle-java8-installer").add(usesAptDatabase)
+    )
+
+  def InstallSbt(updateAptGet: MultiTreeLeaf = UpdateAptGet()) =
+    MandateSequence("Install sbt",
+      WriteRemoteFile("/etc/apt/sources.list.d/sbt.list",
+                      "deb https://dl.bintray.com/sbt/debian /"),
+      InstallAptKey("keyserver.ubuntu.com", "2EE0EA64E40A89B84B2DF73499E82A75642AC823"),
+      updateAptGet.add(usesAptDatabase),
+      InstallPackage("sbt").add(usesAptDatabase)
+    )
 
   def main(args: Array[String]): Unit = {
     Logging // trigger initialization to get the logging configured
@@ -20,16 +80,16 @@ object Main {
     }
 
     def CreateEveryoneUser(name: String) =
-      new MandateSet(Some(s"create personal user: $name"), Seq(
+      MandateSet(s"create personal user: $name",
         CreateOrUpdateUser(name),
         AddUserToGroups(name, "everyone"),
         CreateOrUpdateGroup("everyone")
-      ))
+      )
 
     def AddUsersToGroup(group: String, users: String*) =
-      new MandateSequence(Some(s"add multiple users to group $group"), users.map(AddUserToGroups(_, group)))
+      MandateSequence(s"add multiple users to group $group", users.map(AddUserToGroups(_, group)):_*)
 
-    val mandates1 = new MandateSet(Some("do everything"), Seq(
+    val mandates1 = MandateSet("do everything",
       CreateEveryoneUser("ernie"),
       CreateEveryoneUser("bert"),
       AddUsersToGroup("bedroom", "ernie", "bert"),
@@ -41,49 +101,54 @@ object Main {
       WriteRemoteFileFromTemplate(new File("/tmp/another"), "<%@ val noun: String %>\ntesting the ${noun}", Map("noun" -> "waters")),
       InstallPackage(Package("vim")),
       ExitWithArgument(34)
-    ))
+    )
 
     val mandates2 = NoisyMandate
 
-    val mandates4 = new MandateSet(Some("A"), Seq(
-      ExitWithArgument(1),
+    val ex = ExitWithArgument(1)
+    val mandates4 = MandateSet("A",
+      ex,
       ExitWithArgument(2),
-      new MandateSet(Some("B"), Seq(
-        ExitWithArgument(3),
+      MandateSet("B",
+        ExitWithArgument(1),
         ExitWithArgument(4)
-      )),
-      ExitWithArgument(5)
-    ))
+      ),
+      ExitWithArgument(5),
+      ex
+    )
+
+    val installPackagesWithSharedAptGetUpdate = {
+      val updateAptGet = UpdateAptGet()
+      MandateSet("install packages",
+        InstallJava8(updateAptGet),
+        InstallSbt(updateAptGet)
+      )
+    }
+
+    val installPackagesWithoutSharedAptGetUpdate = {
+      MandateSet("install packages",
+        InstallJava8(),
+        InstallSbt()
+      )
+    }
 
     try {
-      val runMandate = RunMandate(Seq(
-        CommanderMandate(commanders(0), mandates1),
-        CommanderMandate(commanders(1), mandates2)
-//        ,
-//        CommanderMandate(commanders(2), mandates1)
-//        CommanderMandate(commanders(1), mandates4)
-      ))
+      val commanderMultiTrees = Seq(
+        CommanderMultiTree(commanders(0), installPackagesWithSharedAptGetUpdate),
+        CommanderMultiTree(commanders(1), installPackagesWithoutSharedAptGetUpdate)
+      )
 
-      val job = Executive.execute(new File("results"), runMandate, true)
+      val plan = new ExecutionPlan(commanderMultiTrees)
 
-      {
-        import org.scalawag.jibe.report.ExecutiveStatus._
-        def color(s: Value) = s match {
-          case FAILURE => Console.RED
-          case BLOCKED => Console.MAGENTA
-          case SUCCESS => Console.GREEN
-          case NEEDED => Console.CYAN
-          case UNNEEDED => Console.YELLOW
-        }
+      FileUtils.writeFileWithPrintWriter("graph.dot")(plan.toDot)
 
-        println("Overall run: " + color(job.executiveStatus) + job.executiveStatus)
-        val leafStatusCounts = ParentMandateJob.getChildLeafStatusCounts(job.status)
-        Seq(UNNEEDED, NEEDED, SUCCESS, FAILURE, BLOCKED) foreach { s =>
-          leafStatusCounts.get(s) foreach { n =>
-            println(s"  ${color(s)}${s}: $n")
-          }
-        }
-      }
+      val runDir = Await.result(Executive.execute(plan, new File("results"), true)(ExecutionContext.global), Duration.Inf)
+
+      val pw = new PrintWriter(System.out)
+      val report = new TextReport(pw, runDir, TextReportOptions(errorLogs = true))
+
+      report.renderReport()
+      pw.flush()
 
     } catch {
       case ex: AbortException => // System.exit(1) - bad within sbt

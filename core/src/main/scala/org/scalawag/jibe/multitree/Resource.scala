@@ -1,6 +1,6 @@
-package org.scalawag.jibe.mandate
+package org.scalawag.jibe.multitree
 
-trait Resource
+abstract class Resource(override val scope: Scope = CommanderScope) extends Scoped
 
 case class UserResource(name: String) extends Resource
 case class GroupResource(name: String) extends Resource
