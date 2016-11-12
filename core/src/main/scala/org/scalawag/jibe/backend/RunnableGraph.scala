@@ -12,6 +12,37 @@ import org.scalawag.jibe.Logging.log
 import org.scalawag.jibe.multitree.OnlyIdentityEquals
 
 class RunnableGraphFactory {
+  type RunContextType
+
+  trait Vertex {
+    // These are collected on in-edges to determine what the vertex does.
+    type SignalType
+    // This indicates the final state of this Vertex
+    type StateType
+
+    def visit(signals: List[Option[SignalType]]): StateType
+  }
+
+  trait Edge[FromType <: Vertex, ToType <: Vertex] {
+    val from: FromType
+    val to: ToType
+
+    def signal(fromState: FromType#StateType): Option[ToType#SignalType]
+  }
+
+/*
+  trait Edge {
+    type FromType <: Vertex
+    type ToType <: Vertex
+
+    val from: FromType
+    val to: ToType
+
+    def signal(fromState: FromType#StateType): Option[ToType#SignalType]
+  }
+*/
+
+/*
   type VisitContextType
   type VisitOutcomeType
   type PayloadType <: Payload
@@ -20,11 +51,6 @@ class RunnableGraphFactory {
     def onProceed(runContext: VisitContextType): VisitOutcomeType
     def onBlocked(runContext: VisitContextType): Unit
     def onCountermanded(runContext: VisitContextType): Unit
-  }
-
-  sealed trait Vertex {
-    type SignalType
-    type RunContextType
   }
 
   case class Semaphore(permits: Int)
@@ -51,13 +77,6 @@ class RunnableGraphFactory {
   case object Countermand extends CountermanderSignal
   case object Uphold extends CountermanderSignal
 
-  sealed trait Edge {
-    type FromType <: Vertex
-    type ToType <: Vertex
-
-    val from: FromType
-    val to: ToType
-  }
 
   case class PayloaderToPayloaderEdge(from: Payloader, to: Payloader)(implicit val signalFn: VisitOutcomeType => PayloaderSignal) extends Edge {
     override type FromType = Payloader
@@ -84,6 +103,7 @@ class RunnableGraphFactory {
     def apply(from: Countermander, to: Payloader) =
       new CountermanderToPayloaderEdge(from, to)
   }
+*/
 
   /*
   RunnableGraph is a directed graph.  Each vertex is either a SemaphoreVertex or a PayloadVertex.  Running the graph
@@ -103,45 +123,43 @@ class RunnableGraphFactory {
   Concurrency is controlled with the ExecutionContext passed into the RunnableGraph.run() method (maybe implicitly).
   */
 
-  case class RunnableGraph(val vertices: Set[Vertex] = Set.empty, val edges: Set[Edge] = Set.empty) {
+  case class RunnableGraph(val vertices: Set[Vertex] = Set.empty, val edges: Set[Edge[_ <: Vertex, _ <: Vertex]] = Set.empty) {
 
     def +(vertex: Vertex) = RunnableGraph(vertices + vertex, edges)
 
-    def +(edge: Edge) = RunnableGraph(vertices + edge.from + edge.to, edges + edge)
+    def +(edge: Edge[_ <: Vertex, _ <: Vertex]) = RunnableGraph(vertices + edge.from + edge.to, edges + edge)
 
-    // These are some faster-lookup maps that we'll use when actually traversing the graph.
+    // The strange looking type specifications here server to make these invariant members know that they can contain
+    // anything that derives from Vertex instead of trying to use the (narrower) types defined by the Edge trait.
+    private[this] lazy val edgesOut = edges.groupBy(_.from: Vertex).mapValues(_.map(_.to: Vertex))
+    private[this] lazy val edgesIn = edges.groupBy(_.to: Vertex).mapValues(_.map(_.from: Vertex))
 
-    private[this] lazy val payloadVertices = vertices.collect {
-      case p: Payloader => p
-    }
+/*
+        // These are some faster-lookup maps that we'll use when actually traversing the graph.
 
-    private[this] lazy val payloadEdgesOut = edges.collect {
-      case p: PayloaderToPayloaderEdge => p
-    }.groupBy(_.from).mapValues(_.map(_.to))
+        private[this] lazy val payloadVertices = vertices.collect {
+          case p: Payloader => p
+        }
 
-    private[this] lazy val payloadEdgesIn = edges.collect {
-      case p: PayloaderToPayloaderEdge => p
-    }.groupBy(_.to).mapValues(_.map(_.from))
+        private[this] lazy val payloadEdgesOut = edges.collect {
+          case p: PayloaderToPayloaderEdge => p
+        }.groupBy(_.from).mapValues(_.map(_.to))
 
-    //  private[this] lazy val semaphoreEdgesOut = edges.collect {
-    //    case p: PayloadToSemaphoreEdge[R, P] => p
-    //  }.groupBy(_.from).mapValues(_.map(_.to))
-    //
-    //  private[this] lazy val semaphoreEdgesIn = edges.collect {
-    //    case p: SemaphoreToPayloadEdge[R, P] => p
-    //  }.groupBy(_.to).mapValues(_.map(_.from))
+        private[this] lazy val payloadEdgesIn = edges.collect {
+          case p: PayloaderToPayloaderEdge => p
+        }.groupBy(_.to).mapValues(_.map(_.from))
 
-    private[this] def defaultVertexToAttributes(v: Vertex): Map[String, Any] = v match {
+        //  private[this] lazy val semaphoreEdgesOut = edges.collect {
+        //    case p: PayloadToSemaphoreEdge[R, P] => p
+        //  }.groupBy(_.from).mapValues(_.map(_.to))
+        //
+        //  private[this] lazy val semaphoreEdgesIn = edges.collect {
+        //    case p: SemaphoreToPayloadEdge[R, P] => p
+        //  }.groupBy(_.to).mapValues(_.map(_.from))
+    */
 
-      //    case sv: SemaphoreVertex[R, P] =>
-      //      val name = sv.name.getOrElse("<unnamed>")
-      //      val label = s"$name (${sv.permits})"
-      //      Map("label" -> label, "shape" -> "box", "color" -> "red")
-
-      case pv: Payloader =>
-        val label = pv.payload.toString
-        Map("label" -> label, "shape" -> "box")
-
+    private[this] def defaultVertexToAttributes(v: Vertex): Map[String, Any] = {
+      Map("label" -> v.toString, "shape" -> "box")
     }
 
     def toDot(pw: PrintWriter, vertexToAttributes: (Vertex => Map[String, Any]) = defaultVertexToAttributes _) = {
@@ -159,7 +177,7 @@ class RunnableGraphFactory {
       }
 
       for {
-        (from, tos) <- payloadEdgesOut
+        (from, tos) <- edgesOut
         to <- tos
       } {
         pw.println(s""""${id(from)}" -> "${id(to)}"""")
@@ -187,26 +205,26 @@ class RunnableGraphFactory {
       pw.println("}")
     }
 
-    def findCycle(root: Payloader): Option[List[Payloader]] = {
-      def helper(path: List[Payloader]): Option[List[Payloader]] =
+    def findCycle(root: Vertex): Option[List[Vertex]] = {
+      def helper(path: List[Vertex]): Option[List[Vertex]] =
         path match {
           case Nil => None
           case head :: tail =>
             if (tail.contains(head))
               Some(head :: tail.takeWhile(_ != head).reverse)
             else
-              payloadEdgesOut.getOrElse(head, Set.empty).flatMap(d => helper(d :: path)).headOption
+              edgesOut.getOrElse(head, Set.empty).flatMap(d => helper(d :: path)).headOption
         }
 
       helper(List(root))
     }
 
-    def run(runContext: VisitContextType)(implicit ec: ExecutionContext): Future[Unit] = {
+    def run(runContext: RunContextType)(implicit ec: ExecutionContext): Future[Unit] = {
       val t = new Traversal(runContext)
       t.start()
     }
 
-    private[this] class Traversal(visitContext: VisitContextType)(implicit ec: ExecutionContext) {
+    private[this] class Traversal(visitContext: RunContextType)(implicit ec: ExecutionContext) {
 
       // Makes it easier to detect errors where Unit too easily becomes Future[Unit].
       private[this] case class UniqueReturn()
@@ -214,31 +232,32 @@ class RunnableGraphFactory {
       // Create a shadow graph of mutable vertices and edges that we can use to keep track of the state of the traversal.
       // These are the elements we'll use.
 
-      private[this] abstract class ShadowVertex[+V <: Vertex](val original: V) {
-        type State
-        type Signal
+      private[this] class ShadowVertex[V <: Vertex](val original: V) {
 
         // Vertices with in-edges to this vertex are keys in the map.  The values is the signals received from that
         // vertex along that edge.  A value of None means that we have not heard from that vertex yet.
 
-        var ins = Set.empty[ShadowEdge[_]]
+        var ins: Set[ShadowEdge[Vertex, V]] = Set.empty
 
         // Vertices with out-edges to this vertex.  We don't keep track of the signals that we sent them.  They do
         // (see above).  The Booleans in this map indicate whether or not we have sent a signal, but that's all.
 
-        var outs = Set.empty[ShadowEdge[_]]
+        var outs: Set[ShadowEdge[V, Vertex]] = Set.empty
 
         // What's the state of this vertex, if it's been determined.  None means that the jury's still out.
 
-        var state: Option[State] = None
+        var state: Option[original.StateType] = None
 
         // Check to see if there's anything that we can do based on the signals that we've collected.
 
-        def visit(): Future[Set[Try[UniqueReturn]]]
+        def visit(): Future[Set[Try[UniqueReturn]]] = {
+          original.visit(ins.toList.map(_.signal: Option[original.SignalType]))
+        }
 
         override def toString = original.toString
       }
 
+/*
       sealed trait PayloaderState
       case object Countermanded extends PayloaderState
       case object Blocked extends PayloaderState
@@ -249,7 +268,7 @@ class RunnableGraphFactory {
       case object Complete extends CountermanderState
 
 
-      private[this] class ShadowPayloader(override val original: Payloader) extends ShadowVertex[Payloader](original) {
+      private[this] class ShadowVertex(override val original: Vertex) extends ShadowVertex[Payloader](original) {
         override type State = PayloaderState
         override type Signal = PayloaderSignal
 
@@ -387,7 +406,7 @@ class RunnableGraphFactory {
           }
         }
       }
-
+*/
 //      private[this] class ShadowSemaphoreVertex(original: SemaphoreVertex[R, P]) extends ShadowVertex
 
   //    private[this] sealed trait ShadowEdge[F <: ShadowVertex, T <: ShadowVertex] {
@@ -395,15 +414,15 @@ class RunnableGraphFactory {
   //      val to: T
   //    }
 
-      private[this] abstract class ShadowEdge[E <: Edge](original: E, from: ShadowVertex[E#FromType], to: ShadowVertex[E#ToType]) {
+      private[this] abstract class ShadowEdge[FromType <: Vertex, ToType <: Vertex](original: Edge[FromType, ToType], from: ShadowVertex[FromType], to: ShadowVertex[ToType]) {
         // This is set once the edge has been used to signal.  Prior to that, it's set to None.
 
-        var signal: Option[E#ToType#SignalType] = None
+        var signal: Option[ToType#SignalType] = None
 
         // Called by the from vertex whenever it's ready to send the to vertex a signal along this edge.  This
         // should happen exactly once for each edge during the traversal.
 
-        def send(signal: E#ToType#SignalType): Future[Set[Try[UniqueReturn]]] = {
+        def send(signal: ToType#SignalType): Future[Set[Try[UniqueReturn]]] = {
           this.signal = Some(signal)
           this.to.visit()
         }
@@ -411,12 +430,12 @@ class RunnableGraphFactory {
         override def toString = original.toString
       }
 
-      private[this] case class ShadowPayloaderToPayloaderEdge(original: PayloaderToPayloaderEdge, from: ShadowPayloader, to: ShadowPayloader)
-        extends ShadowEdge[PayloaderToPayloaderEdge](original, from, to)
-      private[this] case class ShadowPayloaderToCountermanderEdge(original: PayloaderToCountermanderEdge, from: ShadowPayloader, to: ShadowCountermander)
-        extends ShadowEdge[PayloaderToCountermanderEdge](original, from, to)
-      private[this] case class ShadowCountermanderToPayloaderEdge(original: CountermanderToPayloaderEdge, from: ShadowCountermander, to: ShadowPayloader)
-        extends ShadowEdge[CountermanderToPayloaderEdge](original, from, to)
+//      private[this] case class ShadowPayloaderToPayloaderEdge(original: PayloaderToPayloaderEdge, from: ShadowPayloader, to: ShadowPayloader)
+//        extends ShadowEdge[PayloaderToPayloaderEdge](original, from, to)
+//      private[this] case class ShadowPayloaderToCountermanderEdge(original: PayloaderToCountermanderEdge, from: ShadowPayloader, to: ShadowCountermander)
+//        extends ShadowEdge[PayloaderToCountermanderEdge](original, from, to)
+//      private[this] case class ShadowCountermanderToPayloaderEdge(original: CountermanderToPayloaderEdge, from: ShadowCountermander, to: ShadowPayloader)
+//        extends ShadowEdge[CountermanderToPayloaderEdge](original, from, to)
 
       // And this is the field that contains the shadow graph.
 
@@ -424,13 +443,7 @@ class RunnableGraphFactory {
         // First, build a map of all the new shadow vertices, keyed off the original vertex.
 
         val vertexMap = vertices map { originalVertex =>
-
-          val shadowVertex = originalVertex match {
-            case pv: Payloader => new ShadowPayloader(pv)
-            case dv: Countermander => new ShadowCountermander(dv)
-//            case sv: SemaphoreVertex => new ShadowSemaphoreVertex(sv)
-          }
-
+          val shadowVertex = new ShadowVertex(originalVertex)
           originalVertex -> shadowVertex
         } toMap
 
