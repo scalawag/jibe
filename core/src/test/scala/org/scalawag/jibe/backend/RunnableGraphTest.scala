@@ -9,6 +9,7 @@ import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 
 class RunnableGraphTest extends FunSpec with Matchers {
+  TestLogging
 
   private[this] object TestRunnableGraphFactory extends RunnableGraphFactory {
     override type VisitContextType = TestRunContext
@@ -17,7 +18,7 @@ class RunnableGraphTest extends FunSpec with Matchers {
   }
   import TestRunnableGraphFactory._
 
-  private[this] case class PayloadCall(run: Boolean, enter: Long, exit: Long)
+  private[this] case class PayloadCall(call: PayloaderSignal, enter: Long, exit: Long)
 
   private[this] class TestRunContext {
     var calls = Map.empty[Payload, PayloadCall]
@@ -25,7 +26,7 @@ class RunnableGraphTest extends FunSpec with Matchers {
 
   private[this] case class TestPayload(name: String, duration: FiniteDuration = 100.milliseconds, throws: Boolean = false, returns: Boolean = true) extends Payload {
 
-    private def recordCall[A](runContext: TestRunContext, run: Boolean)(fn: => A): A = {
+    private def recordCall[A](runContext: TestRunContext, call: PayloaderSignal)(fn: => A): A = {
       val enter = System.currentTimeMillis()
       try {
         fn
@@ -33,23 +34,23 @@ class RunnableGraphTest extends FunSpec with Matchers {
         runContext.synchronized {
           if (runContext.calls.contains(this))
             throw new IllegalStateException(s"payload function called more than once for vertex: $this")
-          runContext.calls += this -> PayloadCall(run, enter, System.currentTimeMillis())
+          runContext.calls += this -> PayloadCall(call, enter, System.currentTimeMillis())
         }
       }
     }
 
-    override def onProceed(runContext: TestRunContext) = recordCall(runContext, true) {
+    override def onProceed(runContext: TestRunContext) = recordCall(runContext, YouMayProceed) {
       Thread.sleep(duration.toMillis)
       if (throws)
         throw new RuntimeException("boom")
       returns
     }
 
-    override def onBlocked(runContext: TestRunContext) = recordCall(runContext, false) {
+    override def onBlocked(runContext: TestRunContext) = recordCall(runContext, YouveBeenBlocked) {
       Thread.sleep(10)
     }
 
-    override def onCountermanded(runContext: TestRunContext) = recordCall(runContext, false) {
+    override def onCountermanded(runContext: TestRunContext) = recordCall(runContext, YouveBeenCountermanded) {
       Thread.sleep(10)
     }
 
@@ -85,6 +86,7 @@ class RunnableGraphTest extends FunSpec with Matchers {
     graph.vertices.foreach {
       case pv: Payloader => pv.call(runContext)
 //      case sv: SemaphoreVertex => // NOOP
+      case sv: Countermander => // NOOP
     }
   }
 
@@ -128,7 +130,7 @@ class RunnableGraphTest extends FunSpec with Matchers {
     Await.result(g.run(runContext), Duration.Inf)
 
     assertAllNodesVisited(g)
-    va.call.run shouldBe true
+    va.call.call shouldBe YouMayProceed
   }
 
   it ("should run independent vertices concurrently") {
@@ -147,8 +149,8 @@ class RunnableGraphTest extends FunSpec with Matchers {
     assertAllNodesVisited(g)
     va shouldHaveRunConcurrentlyWith vb
 
-    va.call.run shouldBe true
-    vb.call.run shouldBe true
+    va.call.call shouldBe YouMayProceed
+    vb.call.call shouldBe YouMayProceed
   }
 
   it ("should be able to run the same graph multiple times") {
@@ -161,12 +163,12 @@ class RunnableGraphTest extends FunSpec with Matchers {
     val runContext1 = new TestRunContext
     Await.result(g.run(runContext1), Duration.Inf)
     assertAllNodesVisited(g)(runContext1)
-    va.call(runContext1).run shouldBe true
+    va.call(runContext1).call shouldBe YouMayProceed
 
     val runContext2 = new TestRunContext
     Await.result(g.run(runContext2), Duration.Inf)
     assertAllNodesVisited(g)(runContext2)
-    va.call(runContext2).run shouldBe true
+    va.call(runContext2).call shouldBe YouMayProceed
   }
 
   it ("should be able to run the same graph multiple times concurrently") {
@@ -185,10 +187,10 @@ class RunnableGraphTest extends FunSpec with Matchers {
     Await.result(Future.sequence(Iterable(future1, future2)), Duration.Inf)
 
     assertAllNodesVisited(g)(runContext1)
-    va.call(runContext1).run shouldBe true
+    va.call(runContext1).call shouldBe YouMayProceed
 
     assertAllNodesVisited(g)(runContext2)
-    va.call(runContext2).run shouldBe true
+    va.call(runContext2).call shouldBe YouMayProceed
 
     va.call(runContext1).enter should be < va.call(runContext2).exit
     va.call(runContext2).enter should be < va.call(runContext1).exit
@@ -208,8 +210,8 @@ class RunnableGraphTest extends FunSpec with Matchers {
     assertAllNodesVisited(g)
 
     va shouldPrecede vb
-    va.call.run shouldBe true
-    vb.call.run shouldBe true
+    va.call.call shouldBe YouMayProceed
+    vb.call.call shouldBe YouMayProceed
   }
 
   it ("should abort downstream vertices on throw") {
@@ -220,16 +222,14 @@ class RunnableGraphTest extends FunSpec with Matchers {
 
     g += Edge(va, vb)
 
-Logging.log.debug("MARK")
-
     implicit val runContext = new TestRunContext
     Await.result(g.run(runContext), Duration.Inf)
 
     assertAllNodesVisited(g)
 
     va shouldPrecede vb
-    va.call.run shouldBe true
-    vb.call.run shouldBe false
+    va.call.call shouldBe YouMayProceed
+    vb.call.call shouldBe YouveBeenBlocked
   }
 
   it ("should abort downstream vertices transitively on throw") {
@@ -250,9 +250,9 @@ Logging.log.debug("MARK")
     va shouldPrecede vb
     vb shouldPrecede vc
 
-    va.call.run shouldBe true
-    vb.call.run shouldBe false
-    vc.call.run shouldBe false
+    va.call.call shouldBe YouMayProceed
+    vb.call.call shouldBe YouveBeenBlocked
+    vc.call.call shouldBe YouveBeenBlocked
   }
 
   it ("should abort downstream vertices on false") {
@@ -269,8 +269,8 @@ Logging.log.debug("MARK")
     assertAllNodesVisited(g)
 
     va shouldPrecede vb
-    va.call.run shouldBe true
-    vb.call.run shouldBe false
+    va.call.call shouldBe YouMayProceed
+    vb.call.call shouldBe YouveBeenBlocked
   }
 
   it ("should abort downstream vertices transitively on false") {
@@ -291,9 +291,9 @@ Logging.log.debug("MARK")
     va shouldPrecede vb
     vb shouldPrecede vc
 
-    va.call.run shouldBe true
-    vb.call.run shouldBe false
-    vc.call.run shouldBe false
+    va.call.call shouldBe YouMayProceed
+    vb.call.call shouldBe YouveBeenBlocked
+    vc.call.call shouldBe YouveBeenBlocked
   }
 
   it ("should handle vertices with multiple in-edges") {
@@ -322,10 +322,10 @@ Logging.log.debug("MARK")
     vc shouldPrecede vd
     vb shouldHaveRunConcurrentlyWith vc
 
-    va.call.run shouldBe true
-    vb.call.run shouldBe true
-    vc.call.run shouldBe true
-    vd.call.run shouldBe true
+    va.call.call shouldBe YouMayProceed
+    vb.call.call shouldBe YouMayProceed
+    vc.call.call shouldBe YouMayProceed
+    vd.call.call shouldBe YouMayProceed
   }
 
   it ("should abort vertices with multiple unresolved in-edges immediately") {
@@ -352,10 +352,10 @@ Logging.log.debug("MARK")
     va shouldPrecede vc
     vd.exit should be > vc.exit
 
-    va.call.run shouldBe true
-    vb.call.run shouldBe true
-    vc.call.run shouldBe true
-    vd.call.run shouldBe false
+    va.call.call shouldBe YouMayProceed
+    vb.call.call shouldBe YouMayProceed
+    vc.call.call shouldBe YouMayProceed
+    vd.call.call shouldBe YouveBeenBlocked
   }
 /*
   it ("should use semaphores properly") {
@@ -385,10 +385,10 @@ Logging.log.debug("MARK")
 
     assertAllNodesVisited(g)
 
-    va.call.run shouldBe true
-    vb.call.run shouldBe true
-    vc.call.run shouldBe true
-    vd.call.run shouldBe true
+    va.call.call shouldBe YouMayProceed
+    vb.call.call shouldBe YouMayProceed
+    vc.call.call shouldBe YouMayProceed
+    vd.call.call shouldBe YouMayProceed
 
     va shouldPrecede vb
     va shouldPrecede vc
@@ -440,4 +440,33 @@ Logging.log.debug("MARK")
     g.findCycle(va) shouldBe Some(List(va, vb, vc))
   }
 
+  it ("should countermand a vertex") {
+    var g = new RunnableGraph
+
+    val va = Payloader(new TestPayload("a", returns = false))
+    val vb = Payloader(new TestPayload("b"))
+    val vc = Payloader(new TestPayload("c"))
+
+    val c = new Countermander()
+
+    g += Edge(va, vb)
+    g += Edge(vb, vc)
+
+    g += Edge(va, c){ o: Boolean => if ( o ) Uphold else Countermand }
+    g += Edge(c, vb)
+
+Logging.log.debug("MARK")
+
+    implicit val runContext = new TestRunContext
+    Await.result(g.run(runContext), Duration.Inf)
+
+    assertAllNodesVisited(g)
+
+    va shouldPrecede vb
+    vb shouldPrecede vc
+
+    va.call.call shouldBe YouMayProceed
+    vb.call.call shouldBe YouveBeenCountermanded
+    vc.call.call shouldBe YouMayProceed
+  }
 }
