@@ -14,21 +14,23 @@ import org.scalawag.timber.backend.receiver.formatter.timestamp.HumanReadableTim
 
 object Logging {
 
-  implicit private val MyEntryFormatter = new ProgrammableEntryFormatter(Seq(
-    entry.timestamp formattedWith HumanReadableTimestampFormatter,
-    entry.level formattedWith NameLevelFormatter,
-    entry.threadName,
-    entry.sourceLocation
-  ))
+  def initialize(): Unit = {
+    implicit val MyEntryFormatter = new ProgrammableEntryFormatter(Seq(
+      entry.timestamp formattedWith HumanReadableTimestampFormatter,
+      entry.level formattedWith NameLevelFormatter,
+      entry.threadName,
+      entry.sourceLocation
+    ))
 
-  val config = org.scalawag.timber.backend.dispatcher.configuration.Configuration {
-    val out = file("target/app.log", ImmediateFlushing)
-    Receiver.closeOnShutdown(out)
-    ( level >= DEBUG ) ~> out
+    val config = org.scalawag.timber.backend.dispatcher.configuration.Configuration {
+      val out = file("target/app.log", ImmediateFlushing)
+      Receiver.closeOnShutdown(out)
+      ( level >= DEBUG ) ~> out
+    }
+
+    val disp = new Dispatcher(config)
+    DefaultDispatcher.set(disp)
   }
-
-  val disp = new Dispatcher(config)
-  DefaultDispatcher.set(disp)
 
   val log = new Logger(tags = Set(ImmediateMessage))
 }
