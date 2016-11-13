@@ -48,7 +48,11 @@ class RunnableGraphTest extends FunSpec with Matchers {
   private[this] object TestRunnableGraphFactory extends RunnableGraphFactory {
     override type RunContextType = TestRunContext
 
-    class TestVertex(name: String, result: Try[TestState] = Success(Succeeded), duration: FiniteDuration = 100.milliseconds) extends Vertex {
+    class TestVertex(name: String,
+                     result: Try[TestState] = Success(Succeeded),
+                     duration: FiniteDuration = 100.milliseconds,
+                     override val semaphores: Set[Semaphore] = Set.empty) extends Vertex {
+
       override type SignalType = TestSignal
       override type StateType = TestState
 
@@ -128,17 +132,31 @@ class RunnableGraphTest extends FunSpec with Matchers {
       call.exit
 
     def ranConcurrentlyWith(v2: TestVertex)(implicit rc: TestRunContext) =
-      ( ! ( v1.enter <= v2.exit ) || ( v1.exit >= v2.enter ) ) && ( ! ( v2.enter <= v1.exit ) || ( v2.exit >= v1.enter ) )
+      if ( v1.enter <= v2.exit )
+        v1.exit >= v2.enter
+      else if ( v2.enter <= v1.exit )
+        v2.exit >= v1.enter
+      else
+        false
 
-    def shouldNotHaveRunConcurrentlyWith(v2: TestVertex)(implicit rc: TestRunContext) = {
-      if ( v1 ranConcurrentlyWith v2 )
+    def didNotRunConcurrentlyWith(v2: TestVertex)(implicit rc: TestRunContext) =
+      // v1 occurred entirely before v2 or v1's exit happened in the same millisecond and v2's enter
+      if ( v1.enter < v2.exit )
+        v1.exit <= v2.enter
+      // v2 occurred entirely before v1 or v2's exit happened in the same millisecond and v1's enter
+      else if ( v2.enter < v1.exit )
+        v2.exit <= v1.enter
+      // v2 occurred entirely before v1 or v2's exit happened in the same millisecond and v1's enter
+      else
+        math.signum(v1.exit - v1.enter) != math.signum(v2.exit - v2.enter)
+
+    def shouldNotHaveRunConcurrentlyWith(v2: TestVertex)(implicit rc: TestRunContext) =
+      if ( ! ( v1 didNotRunConcurrentlyWith v2 ) )
         fail(s"$v1 should not have run concurrently with $v2 (${v1.enter}-${v1.exit} ${v2.enter}-${v2.exit})")
-    }
 
-    def shouldHaveRunConcurrentlyWith(v2: TestVertex)(implicit rc: TestRunContext) = {
+    def shouldHaveRunConcurrentlyWith(v2: TestVertex)(implicit rc: TestRunContext) =
       if ( ! ( v1 ranConcurrentlyWith v2 ) )
         fail(s"$v1 should have run concurrently with $v2 (${v1.enter}-${v1.exit} ${v2.enter}-${v2.exit})")
-    }
 
     def shouldPrecede(v2: TestVertex)(implicit rc: TestRunContext) = {
       v1.exit should be <= v2.enter
@@ -387,38 +405,38 @@ class RunnableGraphTest extends FunSpec with Matchers {
     vc.call.result shouldBe Success(Some(Succeeded))
     vd.call.result shouldBe Success(Some(Stopped))
   }
-/*
+
   it ("should use semaphores properly") {
     var g = new RunnableGraph
 
-    val va = new TestVertex(new TestPayload("a"))
-    val vb = new TestVertex(new TestPayload("b"))
-    val vc = new TestVertex(new TestPayload("c"))
-    val vd = new TestVertex(new TestPayload("d"))
-    val vs = SemaphoreVertex(1)
+    val s = new Semaphore(1)
+    val va = new TestVertex("a")
+    val vb = new TestVertex("b", semaphores = Set(s))
+    val vc = new TestVertex("c", semaphores = Set(s))
+    val vd = new TestVertex("d", semaphores = Set(s))
 
     g += Edge(va, vb)
     g += Edge(va, vc)
     g += Edge(va, vd)
 
-    g += Edge(vb, vs)
-    g += Edge(vs, vb)
-
-    g += Edge(vc, vs)
-    g += Edge(vs, vc)
-
-    g += Edge(vd, vs)
-    g += Edge(vs, vd)
+//    g += Edge(vb, vs)
+//    g += Edge(vs, vb)
+//
+//    g += Edge(vc, vs)
+//    g += Edge(vs, vc)
+//
+//    g += Edge(vd, vs)
+//    g += Edge(vs, vd)
 
     implicit val runContext = new TestRunContext
     Await.result(g.run(runContext), Duration.Inf)
 
     assertAllNodesVisited(g)
 
-    va.call.signals shouldBe YouMayProceed
-    vb.call.signals shouldBe YouMayProceed
-    vc.call.signals shouldBe YouMayProceed
-    vd.call.signals shouldBe YouMayProceed
+    va.call.result shouldBe Success(Some(Succeeded))
+    vb.call.result shouldBe Success(Some(Succeeded))
+    vc.call.result shouldBe Success(Some(Succeeded))
+    vd.call.result shouldBe Success(Some(Succeeded))
 
     va shouldPrecede vb
     va shouldPrecede vc
@@ -431,7 +449,6 @@ class RunnableGraphTest extends FunSpec with Matchers {
     vc shouldNotHaveRunConcurrentlyWith vd
     vb shouldNotHaveRunConcurrentlyWith vd
   }
-*/
 
   it ("should detect no cycle") {
     var g = new RunnableGraph

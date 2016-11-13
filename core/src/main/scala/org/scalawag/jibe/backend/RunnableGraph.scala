@@ -1,18 +1,22 @@
 package org.scalawag.jibe.backend
 
-import java.io.PrintWriter
-
 import scala.language.higherKinds
+
+import java.io.PrintWriter
 import scala.collection.mutable.Builder
 import scala.concurrent.Promise
 import scala.util.{Failure, Success, Try}
 import scala.collection.generic.CanBuildFrom
 import scala.concurrent.{ExecutionContext, Future}
 import org.scalawag.jibe.Logging.log
-import org.scalawag.jibe.multitree.OnlyIdentityEquals
+import java.util.concurrent.{Semaphore => JSemaphore}
+
+import org.scalawag.jibe.ReadThroughCache
 
 class RunnableGraphFactory {
   type RunContextType
+
+  class Semaphore(val permits: Int = 1, val name: Option[String] = None)
 
   trait Vertex {
     // These are collected on in-edges to determine what the vertex does.
@@ -25,6 +29,8 @@ class RunnableGraphFactory {
     // visit() method will not be called again.  Prior to that, every time it is called, it should have more signals
     // available, although this is not enforced.
     def visit(signals: List[Option[SignalType]])(implicit runContext: RunContextType): Option[StateType]
+
+    val semaphores: Set[Semaphore] = Set.empty
   }
 
   trait Edge {
@@ -129,6 +135,12 @@ class RunnableGraphFactory {
       // Makes it easier to detect errors where Unit too easily becomes Future[Unit].
       private[this] case class UniqueReturn()
 
+      // Create the Java Semaphores to represent the Semaphores for this run.  These are stand-ins that must be
+      // created anew for each run or else multiple runs will interact with each other through the shared Java
+      // Semaphores.
+
+      private[this] val semaphoreMap = new ReadThroughCache[Semaphore, JSemaphore](s => new JSemaphore(s.permits))
+
       // Create a shadow graph of mutable vertices and edges that we can use to keep track of the state of the traversal.
       // These are the elements we'll use.
 
@@ -156,7 +168,14 @@ class RunnableGraphFactory {
 
           log.debug(s"visiting vertex $this with signals $signals")
 
-          val visitFuture = Future(original.visit(signals)(visitContext))
+          val visitFuture = Future {
+            acquireSemaphores()
+            try {
+              original.visit(signals)(visitContext)
+            } finally {
+              releaseSemaphores()
+            }
+          }
 
           visitFuture flatMap {
             case Some(state) =>
@@ -180,12 +199,21 @@ class RunnableGraphFactory {
                 }
               afterAllFlat(futures)
           }
-
-// TODO: where to acquire semaphores?
-//              if ( signal == YouMayProceed )
-//                null // unusedSemaphores.releaseDownstreamSemaphores(null)
-
         }
+
+        private[this] def acquireSemaphores(): Unit =
+          original.semaphores.foreach { s =>
+            val js = semaphoreMap.getOrCreate(s)
+            log.debug(s"acquiring semaphore ${s.name.getOrElse(System.identityHashCode(s))} for vertex $this")
+            js.acquire()
+          }
+
+        private[this] def releaseSemaphores(): Unit =
+          original.semaphores.foreach { s =>
+            val js = semaphoreMap.getOrCreate(s)
+            log.debug(s"releasing semaphore ${s.name.getOrElse(System.identityHashCode(s))} for vertex $this")
+            js.release()
+          }
 
         override def toString = original.toString
       }
