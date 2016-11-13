@@ -20,7 +20,11 @@ class RunnableGraphFactory {
     // This indicates the final state of this Vertex
     type StateType
 
-    def visit(signals: List[Option[SignalType]]): StateType
+    // When this method returns Some, it means that it did what it's going to do and its state is current.  When it
+    // returns None, it means that it still doesn't have enough signals to do its thing.  After it returns Some, the
+    // visit() method will not be called again.  Prior to that, every time it is called, it should have more signals
+    // available, although this is not enforced.
+    def visit(signals: List[Option[SignalType]])(implicit runContext: RunContextType): Option[StateType]
   }
 
   trait Edge {
@@ -30,9 +34,20 @@ class RunnableGraphFactory {
     val from: FromType
     val to: ToType
 
-    def signal(fromState: FromType#StateType): Option[ToType#SignalType]
+    def signal(fromState: Try[FromType#StateType]): ToType#SignalType
   }
 
+  object Edge {
+    def apply[F <: Vertex, T <: Vertex](f: F, t: T)(implicit signalFn: Try[F#StateType] => T#SignalType) = {
+      new Edge {
+        override type FromType = F
+        override type ToType = T
+        override val from = f
+        override val to = t
+        override def signal(fromState: Try[F#StateType]) = signalFn(fromState)
+      }
+    }
+  }
   /*
   RunnableGraph is a directed graph.  Each vertex is either a SemaphoreVertex or a PayloadVertex.  Running the graph
   means to call one of the Payload methods (run or abort) on each Payload in the graph exactly once.  Payloads will
@@ -51,7 +66,7 @@ class RunnableGraphFactory {
   Concurrency is controlled with the ExecutionContext passed into the RunnableGraph.run() method (maybe implicitly).
   */
 
-  case class RunnableGraph(val vertices: Set[Vertex] = Set.empty, val edges: Set[Edge] = Set.empty) {
+  case class RunnableGraph(vertices: Set[Vertex] = Set.empty, edges: Set[Edge] = Set.empty) {
 
     def +(vertex: Vertex) = RunnableGraph(vertices + vertex, edges)
 
@@ -74,7 +89,7 @@ class RunnableGraphFactory {
 
       vertices foreach { v =>
         val attrString = vertexToAttributes(v).map { case (k, v) =>
-          s"""${k}="${v}""""
+          s"""$k="$v""""
         }.mkString("[", ",", "]")
 
         pw.println(s""""${id(v)}"$attrString""")
@@ -133,26 +148,61 @@ class RunnableGraphFactory {
 
         var state: Option[original.StateType] = None
 
-        // Check to see if there's anything that we can do based on the signals that we've collected.
+        // Visit the vertex.  It should check to see if there's anything that it can determine about its state from
+        // the signals that we've collected.
 
         def visit(): Future[Set[Try[UniqueReturn]]] = {
-          original.visit(ins.toList.map(_.signal.map(_.asInstanceOf[original.SignalType])))
-          Future.successful(Set(Success(UniqueReturn())))
+          val signals = ins.toList.map(_.signal.map(_.asInstanceOf[original.SignalType]))
+
+          log.debug(s"visiting vertex $this with signals $signals")
+
+          val visitFuture = Future(original.visit(signals)(visitContext))
+
+          visitFuture flatMap {
+            case Some(state) =>
+              log.debug(s"$this entered state $state, signaling downstream vertices")
+              val futures =
+                outs map { e =>
+                  e.send(Success(state.asInstanceOf[e.original.FromType#StateType]))
+                }
+              afterAllFlat(futures)
+
+            case None =>
+              log.debug(s"$this has not entered a state, signaling no one")
+              Future.successful(Set(Success(UniqueReturn()): Try[UniqueReturn]))
+
+          } recoverWith {
+            case ex =>
+              log.debug(s"this threw $ex, signaling downstream vertices")
+              val futures =
+                outs map { e =>
+                  e.send(Failure(ex))
+                }
+              afterAllFlat(futures)
+          }
+
+// TODO: where to acquire semaphores?
+//              if ( signal == YouMayProceed )
+//                null // unusedSemaphores.releaseDownstreamSemaphores(null)
+
         }
 
         override def toString = original.toString
       }
 
-      private[this] class ShadowEdge(val original: Edge)(val from: ShadowVertex[original.FromType], val to: ShadowVertex[original.ToType]) {
+      private[this] abstract class ShadowEdge(val original: Edge) {
+        val from: ShadowVertex[original.FromType]
+        val to: ShadowVertex[original.ToType]
+
         // This is set once the edge has been used to signal.  Prior to that, it's set to None.
 
-        var signal: Option[to.original.SignalType] = None
+        var signal: Option[original.ToType#SignalType] = None
 
         // Called by the from vertex whenever it's ready to send the to vertex a signal along this edge.  This
         // should happen exactly once for each edge during the traversal.
 
-        def send(signal: to.original.SignalType): Future[Set[Try[UniqueReturn]]] = {
-          this.signal = Some(signal)
+        def send(state: Try[original.FromType#StateType]): Future[Set[Try[UniqueReturn]]] = {
+          this.signal = Some(original.signal(state))
           this.to.visit()
         }
 
@@ -170,11 +220,16 @@ class RunnableGraphFactory {
         } toMap
 
         // Now, go through all of the original edges and add them to the shadow vertices.
+        // All these casts are safe because we just added the vertices to the map, so we know what they are even
+        // though they're not statically typed as such because of the heterogeneous nature of the map.
 
         edges foreach { edge =>
           val shadowFrom = vertexMap(edge.from).asInstanceOf[ShadowVertex[edge.FromType]]
           val shadowTo = vertexMap(edge.to).asInstanceOf[ShadowVertex[edge.ToType]]
-          val shadowEdge = new ShadowEdge(edge)(shadowFrom, shadowTo)
+          val shadowEdge = new ShadowEdge(edge) {
+            override val from = shadowTo.asInstanceOf[ShadowVertex[original.FromType]]
+            override val to = shadowTo.asInstanceOf[ShadowVertex[original.ToType]]
+          }
 
           shadowFrom.outs += shadowEdge
           shadowTo.ins += shadowEdge
@@ -216,7 +271,7 @@ class RunnableGraphFactory {
     }.map(_.result())
   }
 
-  def mapAll[A, B](future: Future[A])(fn: Try[A] => Future[B])(implicit ec: ExecutionContext): Future[B] =
+  def mapTry[A, B](future: Future[A])(fn: Try[A] => Future[B])(implicit ec: ExecutionContext): Future[B] =
     future flatMap { a =>
       fn(Success(a))
     } recoverWith {
