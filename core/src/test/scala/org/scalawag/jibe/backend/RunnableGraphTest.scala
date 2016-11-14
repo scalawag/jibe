@@ -26,7 +26,7 @@ class RunnableGraphTest extends FunSpec with Matchers {
 
   private[this] case class VertexCall(signals: List[Option[TestSignal]], result: Try[Option[TestState]], enter: Long, exit: Long)
 
-  private[this] class TestRunContext {
+  private[this] class TestVisitContext {
     var calls = Map.empty[TestRunnableGraphFactory.TestVertex, List[VertexCall]]
 
     def dump(ps: PrintStream): Unit = {
@@ -46,26 +46,28 @@ class RunnableGraphTest extends FunSpec with Matchers {
   }
 
   private[this] object TestRunnableGraphFactory extends RunnableGraphFactory {
-    override type RunContextType = TestRunContext
+    override type VisitContextType = TestVisitContext
 
     class TestVertex(name: String,
                      result: Try[TestState] = Success(Succeeded),
                      duration: FiniteDuration = 100.milliseconds,
-                     override val semaphores: Set[Semaphore] = Set.empty) extends Vertex {
+                     val semaphores: Set[Semaphore] = Set.empty) extends Vertex {
 
       override type SignalType = TestSignal
       override type StateType = TestState
+      override val semaphoresToAcquire = semaphores
+      override val semaphoresToRelease = semaphores
 
-      private[this] def recordCall(signals: List[Option[TestSignal]])(fn: => Option[TestState])(implicit runContext: TestRunContext) = {
+      private[this] def recordCall(signals: List[Option[TestSignal]])(fn: => Option[TestState])(implicit visitContext: TestVisitContext) = {
         val enter = System.currentTimeMillis()
         val result = Try(fn)
-        runContext.synchronized {
-          runContext.calls += this -> ( VertexCall(signals, result, enter, System.currentTimeMillis()) :: runContext.calls.getOrElse(this, Nil) )
+        visitContext.synchronized {
+          visitContext.calls += this -> ( VertexCall(signals, result, enter, System.currentTimeMillis()) :: visitContext.calls.getOrElse(this, Nil) )
         }
         result.get
       }
 
-      override def visit(signals: List[Option[TestSignal]])(implicit runContext: TestRunContext) = recordCall(signals) {
+      override def visit(signals: List[Option[TestSignal]])(implicit visitContext: TestVisitContext) = recordCall(signals) {
         if ( signals.exists(_ == Some(Stop)) ) {
           Thread.sleep(duration.toMillis)
           Some(Stopped)
@@ -112,26 +114,26 @@ class RunnableGraphTest extends FunSpec with Matchers {
   }
   
 
-  private[this] def assertAllNodesVisited(graph: RunnableGraph)(implicit runContext: TestRunContext) = {
+  private[this] def assertAllNodesVisited(graph: RunnableGraph)(implicit visitContext: TestVisitContext) = {
     graph.vertices.foreach {
-      case tv: TestVertex => tv.call(runContext)
-//      case pv: Payloader => pv.call(runContext)
+      case tv: TestVertex => tv.call(visitContext)
+//      case pv: Payloader => pv.call(visitContext)
 //      case sv: SemaphoreVertex => // NOOP
 //      case sv: Countermander => // NOOP
     }
   }
 
   private[this] implicit class VertexPimper(v1: TestVertex) {
-    def call(implicit runContext: TestRunContext) =
-      runContext.calls(v1).head
+    def call(implicit visitContext: TestVisitContext) =
+      visitContext.calls(v1).head
 
-    def enter(implicit runContext: TestRunContext) =
+    def enter(implicit visitContext: TestVisitContext) =
       call.enter
 
-    def exit(implicit runContext: TestRunContext) =
+    def exit(implicit visitContext: TestVisitContext) =
       call.exit
 
-    def ranConcurrentlyWith(v2: TestVertex)(implicit rc: TestRunContext) =
+    def ranConcurrentlyWith(v2: TestVertex)(implicit rc: TestVisitContext) =
       if ( v1.enter <= v2.exit )
         v1.exit >= v2.enter
       else if ( v2.enter <= v1.exit )
@@ -139,7 +141,7 @@ class RunnableGraphTest extends FunSpec with Matchers {
       else
         false
 
-    def didNotRunConcurrentlyWith(v2: TestVertex)(implicit rc: TestRunContext) =
+    def didNotRunConcurrentlyWith(v2: TestVertex)(implicit rc: TestVisitContext) =
       // v1 occurred entirely before v2 or v1's exit happened in the same millisecond and v2's enter
       if ( v1.enter < v2.exit )
         v1.exit <= v2.enter
@@ -150,15 +152,15 @@ class RunnableGraphTest extends FunSpec with Matchers {
       else
         math.signum(v1.exit - v1.enter) != math.signum(v2.exit - v2.enter)
 
-    def shouldNotHaveRunConcurrentlyWith(v2: TestVertex)(implicit rc: TestRunContext) =
+    def shouldNotHaveRunConcurrentlyWith(v2: TestVertex)(implicit rc: TestVisitContext) =
       if ( ! ( v1 didNotRunConcurrentlyWith v2 ) )
         fail(s"$v1 should not have run concurrently with $v2 (${v1.enter}-${v1.exit} ${v2.enter}-${v2.exit})")
 
-    def shouldHaveRunConcurrentlyWith(v2: TestVertex)(implicit rc: TestRunContext) =
+    def shouldHaveRunConcurrentlyWith(v2: TestVertex)(implicit rc: TestVisitContext) =
       if ( ! ( v1 ranConcurrentlyWith v2 ) )
         fail(s"$v1 should have run concurrently with $v2 (${v1.enter}-${v1.exit} ${v2.enter}-${v2.exit})")
 
-    def shouldPrecede(v2: TestVertex)(implicit rc: TestRunContext) = {
+    def shouldPrecede(v2: TestVertex)(implicit rc: TestVisitContext) = {
       v1.exit should be <= v2.enter
     }
   }
@@ -170,11 +172,11 @@ class RunnableGraphTest extends FunSpec with Matchers {
 
     g += va
 
-    implicit val runContext = new TestRunContext
-    Await.result(g.run(runContext), Duration.Inf)
+    implicit val visitContext = new TestVisitContext
+    Await.result(g.run(visitContext), Duration.Inf)
 
     Logging.log.debug { pw: PrintWriter =>
-      runContext.dump(pw)
+      visitContext.dump(pw)
     }
 
     assertAllNodesVisited(g)
@@ -190,9 +192,9 @@ class RunnableGraphTest extends FunSpec with Matchers {
     g += va
     g += vb
 
-    implicit val runContext = new TestRunContext
+    implicit val visitContext = new TestVisitContext
 
-    Await.result(g.run(runContext), Duration.Inf)
+    Await.result(g.run(visitContext), Duration.Inf)
 
     assertAllNodesVisited(g)
     va shouldHaveRunConcurrentlyWith vb
@@ -208,15 +210,15 @@ class RunnableGraphTest extends FunSpec with Matchers {
 
     g += va
 
-    val runContext1 = new TestRunContext
-    Await.result(g.run(runContext1), Duration.Inf)
-    assertAllNodesVisited(g)(runContext1)
-    va.call(runContext1).result shouldBe Success(Some(Succeeded))
+    val visitContext1 = new TestVisitContext
+    Await.result(g.run(visitContext1), Duration.Inf)
+    assertAllNodesVisited(g)(visitContext1)
+    va.call(visitContext1).result shouldBe Success(Some(Succeeded))
 
-    val runContext2 = new TestRunContext
-    Await.result(g.run(runContext2), Duration.Inf)
-    assertAllNodesVisited(g)(runContext2)
-    va.call(runContext2).result shouldBe Success(Some(Succeeded))
+    val visitContext2 = new TestVisitContext
+    Await.result(g.run(visitContext2), Duration.Inf)
+    assertAllNodesVisited(g)(visitContext2)
+    va.call(visitContext2).result shouldBe Success(Some(Succeeded))
   }
 
   it ("should be able to run the same graph multiple times concurrently") {
@@ -226,22 +228,22 @@ class RunnableGraphTest extends FunSpec with Matchers {
 
     g += va
 
-    val runContext1 = new TestRunContext
-    val future1 = g.run(runContext1)
+    val visitContext1 = new TestVisitContext
+    val future1 = g.run(visitContext1)
 
-    val runContext2 = new TestRunContext
-    val future2 = g.run(runContext2)
+    val visitContext2 = new TestVisitContext
+    val future2 = g.run(visitContext2)
 
     Await.result(Future.sequence(Iterable(future1, future2)), Duration.Inf)
 
-    assertAllNodesVisited(g)(runContext1)
-    va.call(runContext1).result shouldBe Success(Some(Succeeded))
+    assertAllNodesVisited(g)(visitContext1)
+    va.call(visitContext1).result shouldBe Success(Some(Succeeded))
 
-    assertAllNodesVisited(g)(runContext2)
-    va.call(runContext2).result shouldBe Success(Some(Succeeded))
+    assertAllNodesVisited(g)(visitContext2)
+    va.call(visitContext2).result shouldBe Success(Some(Succeeded))
 
-    va.call(runContext1).enter should be < va.call(runContext2).exit
-    va.call(runContext2).enter should be < va.call(runContext1).exit
+    va.call(visitContext1).enter should be < va.call(visitContext2).exit
+    va.call(visitContext2).enter should be < va.call(visitContext1).exit
   }
 
   it ("should run dependent vertices in strict order") {
@@ -252,8 +254,8 @@ class RunnableGraphTest extends FunSpec with Matchers {
 
     g += Edge(va, vb)
 
-    implicit val runContext = new TestRunContext
-    Await.result(g.run(runContext), Duration.Inf)
+    implicit val visitContext = new TestVisitContext
+    Await.result(g.run(visitContext), Duration.Inf)
 
     assertAllNodesVisited(g)
 
@@ -270,8 +272,8 @@ class RunnableGraphTest extends FunSpec with Matchers {
 
     g += Edge(va, vb)
 
-    implicit val runContext = new TestRunContext
-    Await.result(g.run(runContext), Duration.Inf)
+    implicit val visitContext = new TestVisitContext
+    Await.result(g.run(visitContext), Duration.Inf)
 
     assertAllNodesVisited(g)
 
@@ -290,8 +292,8 @@ class RunnableGraphTest extends FunSpec with Matchers {
     g += Edge(va, vb)
     g += Edge(vb, vc)
 
-    implicit val runContext = new TestRunContext
-    Await.result(g.run(runContext), Duration.Inf)
+    implicit val visitContext = new TestVisitContext
+    Await.result(g.run(visitContext), Duration.Inf)
 
     assertAllNodesVisited(g)
 
@@ -311,8 +313,8 @@ class RunnableGraphTest extends FunSpec with Matchers {
 
     g += Edge(va, vb)
 
-    implicit val runContext = new TestRunContext
-    Await.result(g.run(runContext), Duration.Inf)
+    implicit val visitContext = new TestVisitContext
+    Await.result(g.run(visitContext), Duration.Inf)
 
     assertAllNodesVisited(g)
 
@@ -331,8 +333,8 @@ class RunnableGraphTest extends FunSpec with Matchers {
     g += Edge(va, vb)
     g += Edge(vb, vc)
 
-    implicit val runContext = new TestRunContext
-    Await.result(g.run(runContext), Duration.Inf)
+    implicit val visitContext = new TestVisitContext
+    Await.result(g.run(visitContext), Duration.Inf)
 
     assertAllNodesVisited(g)
 
@@ -357,8 +359,8 @@ class RunnableGraphTest extends FunSpec with Matchers {
     g += Edge(va, vc)
     g += Edge(vc, vd)
 
-    implicit val runContext = new TestRunContext
-    Await.result(g.run(runContext), Duration.Inf)
+    implicit val visitContext = new TestVisitContext
+    Await.result(g.run(visitContext), Duration.Inf)
 
     assertAllNodesVisited(g)
 
@@ -389,8 +391,8 @@ class RunnableGraphTest extends FunSpec with Matchers {
     g += Edge(va, vc)
     g += Edge(vc, vd)
 
-    implicit val runContext = new TestRunContext
-    Await.result(g.run(runContext), Duration.Inf)
+    implicit val visitContext = new TestVisitContext
+    Await.result(g.run(visitContext), Duration.Inf)
 
     assertAllNodesVisited(g)
 
@@ -428,8 +430,8 @@ class RunnableGraphTest extends FunSpec with Matchers {
 //    g += Edge(vd, vs)
 //    g += Edge(vs, vd)
 
-    implicit val runContext = new TestRunContext
-    Await.result(g.run(runContext), Duration.Inf)
+    implicit val visitContext = new TestVisitContext
+    Await.result(g.run(visitContext), Duration.Inf)
 
     assertAllNodesVisited(g)
 
@@ -504,8 +506,8 @@ class RunnableGraphTest extends FunSpec with Matchers {
 
 Logging.log.debug("MARK")
 
-    implicit val runContext = new TestRunContext
-    Await.result(g.run(runContext), Duration.Inf)
+    implicit val visitContext = new TestVisitContext
+    Await.result(g.run(visitContext), Duration.Inf)
 
     assertAllNodesVisited(g)
 

@@ -51,9 +51,14 @@ class Barrier(val name: Option[String] = None,
 case class BeforeBarrier(barrier: Barrier) extends MultiTreeDecoration
 case class AfterBarrier(barrier: Barrier) extends MultiTreeDecoration
 
-class Activator(val name: Option[String] = None,
-                override val scope: Scope = CommanderScope) extends Scoped
+sealed trait FlagStyle
+case object ConjunctionFlag extends FlagStyle
+case object DisjunctionFlag extends FlagStyle
 
-case class ActivateWhenCompleteIfStatusIs(activator: Activator, status: Report.Status) extends MultiTreeDecoration
-case class IfActivated(activator: Activator) extends MultiTreeDecoration
-case class IfNotActivated(activator: Activator) extends MultiTreeDecoration
+class Flag(val name: Option[String] = None,
+           val style: FlagStyle = DisjunctionFlag,
+           override val scope: Scope = CommanderScope) extends Scoped
+
+case class FlagOn(flag: Flag, status: Report.Status) extends MultiTreeDecoration
+case class IfFlagged(flag: Flag) extends MultiTreeDecoration
+case class IfUnflagged(flag: Flag) extends MultiTreeDecoration

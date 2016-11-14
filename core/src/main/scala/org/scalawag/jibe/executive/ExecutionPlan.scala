@@ -1,12 +1,16 @@
 package org.scalawag.jibe.executive
 
 import java.io.PrintWriter
-import org.scalawag.jibe.backend.RunnableGraph._
-import org.scalawag.jibe.backend.{Commander, RunnableGraph}
+
+import org.scalawag.jibe.backend.Commander
 import org.scalawag.jibe.multitree.MultiTreeBranch.{Parallel, Series}
 import org.scalawag.jibe.multitree._
 import org.scalawag.jibe.AbortException
+import org.scalawag.jibe.report.Report
+import org.scalawag.jibe.{multitree => mt}
+
 import scala.annotation.tailrec
+import scala.util.{Failure, Success, Try}
 
 // Instantiation of this class causes the plan to be built from its commander-specific multi-trees.
 
@@ -20,13 +24,8 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
   }.toMap
 
   // This is the graph that we're going to populate to represent this MultiTree and execute it.
-
-  private[this] var graph = new RunnableGraph[RunContext, Payload]
-
-  // Subgraphs just for convenience when building up a large graph out of smaller graphs.  Using the edge method,
-  // we'll create edges between two subgraphs and the tail of the first to the head of the second will be connected.
-
-  private[this] case class Subgraph(head: PayloadVertex[RunContext, Payload], tail: PayloadVertex[RunContext, Payload])
+  import PlanGraphFactory._
+  private[this] var graph = new RunnableGraph
 
   // A map to hold things that can be scoped by-commander or globally.  Consumers pass in the Commander during
   // getOrCreate calls so that it can be used if necessary.  If the Scoped item is globally scoped, the passed-in
@@ -68,32 +67,38 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
   // These maps are here to manage the parts of the graph that we've already created.  We may need them again when
   // we find another path to the same item.
 
-  private[this] val plannedResources = new ScopedMap[Resource, PayloadVertex[RunContext, Payload]]
-  private[this] val plannedBarriers = new ScopedMap[Barrier, PayloadVertex[RunContext, Payload]]
-  private[this] val plannedSemaphores = new ScopedMap[Semaphore, SemaphoreVertex[RunContext, Payload]]
+  private[this] val plannedResources = new ScopedMap[Resource, ResourceVertex]
+  private[this] val plannedFlags = new ScopedMap[Flag, FlagVertex]
+  private[this] val plannedBarriers = new ScopedMap[Barrier, BarrierVertex]
+  private[this] val plannedSemaphores = new ScopedMap[mt.Semaphore, Semaphore]
   private[this] val plannedBranches = new CommanderMap[MultiTreeId, Subgraph]
   private[this] val plannedLeaves = new CommanderMap[MultiTreeId, Subgraph]
 
   // Methods to create the various vertices in the graph.  These are mostly just calls to the maps above with the
   // createFn specified.
 
-  private[this] def planSemaphore(c: Commander, s: Semaphore) = plannedSemaphores.getOrCreate(s, c) {
-    RunnableGraph.SemaphoreVertex[RunContext, Payload](s.count, s.name)
+  private[this] def planSemaphore(c: Commander, s: mt.Semaphore) = plannedSemaphores.getOrCreate(s, c) {
+    new Semaphore(s.count, s.name)
   }
 
   private[this] def planResource(c: Commander, r: Resource) = plannedResources.getOrCreate(r, c) {
-    RunnableGraph.PayloadVertex[RunContext, Payload](ResourcePayload(r, if ( r.scope == GlobalScope ) None else Some(c)))
+    ResourceVertex(r, if ( r.scope == GlobalScope ) None else Some(c))
+  }
+
+  private[this] def planFlag(c: Commander, f: Flag) = plannedFlags.getOrCreate(f, c) {
+    FlagVertex(f, if ( f.scope == GlobalScope ) None else Some(c))
   }
 
   private[this] def planBarrier(c: Commander, b: Barrier) = plannedBarriers.getOrCreate(b, c) {
-    RunnableGraph.PayloadVertex[RunContext, Payload](BarrierPayload(b, if ( b.scope == GlobalScope ) None else Some(c)))
+    BarrierVertex(b, if ( b.scope == GlobalScope ) None else Some(c))
   }
 
   private[this] def planLeaf(commander: Commander, leaf: MultiTreeLeaf) = {
     val id = multiTreeIdMap(commander).getId(leaf)
     plannedLeaves.getOrCreate(id, commander) {
-      val t = Vertex[RunContext, Payload](Leaf(leaf, commander))
-      val sg = Subgraph(t, t)
+      val semaphores = planSemaphores(commander, leaf)
+      val t = LeafVertex(leaf, commander, semaphores)
+      val sg = Subgraph(t)
       planDecorations(commander, sg, leaf.decorations)
       sg
     }
@@ -104,8 +109,10 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
     plannedBranches.getOrCreate(id, commander) {
       // Create the in and out vertices for this branch.
 
-      val in = Vertex[RunContext, Payload](BranchHead(branch, commander))
-      val out = Vertex[RunContext, Payload](BranchTail(branch, commander))
+      val semaphores = planSemaphores(commander, branch)
+
+      val in = BranchHead(branch, commander, semaphores)
+      val out = BranchTail(branch, commander, semaphores)
 
       // recursively plan all of the contents
 
@@ -117,7 +124,7 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
 
           if ( childSubgraphs.length > 1 ) {
             childSubgraphs.toList.sliding(2) foreach { case List(l, r) =>
-              val seq = Vertex[RunContext, Payload](Sequencer(branch, commander))
+              val seq = Sequencer(branch, commander)
               graph += Edge(l.tail, seq)
               graph += Edge(seq, r.head)
             }
@@ -153,6 +160,11 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
     case b: MultiTreeBranch => planBranch(commander, b)
   }
 
+  private[this] def planSemaphores(commander: Commander, multiTree: MultiTree): Set[Semaphore] =
+    multiTree.decorations collect {
+      case CriticalSection(s) => planSemaphore(commander, s)
+    }
+
   // Adds the edges needed to realize the MultiTreeDecorations for any MultiTree.
 
   private[this] def planDecorations(commander: Commander, subgraph: Subgraph, decorations: Set[MultiTreeDecoration]) =
@@ -167,16 +179,10 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
           graph += Edge(planResource(commander, r), subgraph.head)
         }
 
-      case EnterCriticalSection(s) =>
-        graph += Edge(planSemaphore(commander, s), subgraph.head)
-
-      case ExitCriticalSection(s) =>
-        graph += Edge(subgraph.tail, planSemaphore(commander, s))
-
-      case CriticalSection(semaphore) =>
-        val s = planSemaphore(commander, semaphore)
-        graph += Edge(s, subgraph.head)
-        graph += Edge(subgraph.tail, s)
+      // These are handled elsewhere (planSemaphores) because they are immutable in Vertex
+      case _: EnterCriticalSection =>
+      case _: ExitCriticalSection =>
+      case _: CriticalSection =>
 
       case BeforeBarrier(b) =>
         graph += Edge(subgraph.tail, planBarrier(commander, b))
@@ -184,18 +190,33 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
       case AfterBarrier(b) =>
         graph += Edge(planBarrier(commander, b), subgraph.head)
 
-      // TODO: these need to be implemented
-      case ActivateWhenCompleteIfStatusIs(activator, status) => ???
-      case IfActivated(activator) => ???
-      case IfNotActivated(activator) => ???
+      case FlagOn(flag, status) =>
+        graph += Edge(subgraph.tail, planFlag(commander, flag)) {
+          case Success(s) if s == status => SetFlag
+          case _ => Abstain
+        }
+
+      case IfFlagged(flag) =>
+        graph += Edge(planFlag(commander, flag), subgraph.head) {
+          case Success(Flagged) => Proceed
+          case Success(Unflagged) => BypassUntil(subgraph.tail)
+          case Failure(_) => Abort
+        }
+
+      case IfUnflagged(flag) =>
+        graph += Edge(planFlag(commander, flag), subgraph.head) {
+          case Success(Flagged) => BypassUntil(subgraph.tail)
+          case Success(Unflagged) => Proceed
+          case Failure(_) => Abort
+        }
     }
 
 
   private[this] def planCommanderMultiTree(commanderMultiTree: CommanderMultiTree): Subgraph = {
     val subgraph = planMultiTree(commanderMultiTree.commander, commanderMultiTree.multiTree)
 
-    val in = Vertex[RunContext, Payload](CommanderHead(commanderMultiTree))
-    val out = Vertex[RunContext, Payload](CommanderTail(commanderMultiTree))
+    val in = CommanderHead(commanderMultiTree)
+    val out = CommanderTail(commanderMultiTree)
 
     graph += Edge(in, subgraph.head)
     graph += Edge(subgraph.tail, out)
@@ -203,20 +224,18 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
     Subgraph(in, out)
   }
 
-  private[this] def planCommanderMultiTrees(commanderMultiTrees: Seq[CommanderMultiTree]): Subgraph = {
+  private[this] def planCommanderMultiTrees(commanderMultiTrees: Seq[CommanderMultiTree]): Unit = {
     val commanderSubgraphs = commanderMultiTrees.map(planCommanderMultiTree)
 
     // Always wired in parallel, no decorations.
 
-    val in = Vertex[RunContext, Payload](Start)
-    val out = Vertex[RunContext, Payload](Finish)
+    val in = Start
+    val out = Finish
 
     commanderSubgraphs foreach { commanderSubgraph =>
       graph += Edge(in, commanderSubgraph.head)
       graph += Edge(commanderSubgraph.tail, out)
     }
-
-    Subgraph(in, out)
   }
 
   // This is what actually creates and stores the RunnableGraph representing the input MultiTree.
@@ -225,16 +244,16 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
 
   val runnableGraph = graph // from var to val, from private to public
 
-  private[this] def checkForCycles(root: PayloadVertex[RunContext, Payload], commander: Commander): Unit =
+  private[this] def checkForCycles(root: CommanderHead): Unit =
     graph.findCycle(root) foreach { cycle =>
       // We found a cycle, so we need to try to communicate it to the user.  Turn the cycle into a list of segments,
       // each of which begins and ends with a CycleSegmentEnd, which we'll try to turn into English.
       //
 
       @tailrec
-      def segmentize(todo: Iterable[Payload],
-                     segments: List[List[Payload]] = Nil,
-                     headDuplicated: Boolean = false): List[List[Payload]] =
+      def segmentize(todo: Iterable[Vertex],
+                     segments: List[List[Vertex]] = Nil,
+                     headDuplicated: Boolean = false): List[List[Vertex]] =
         todo match {
           case Nil =>
             segments
@@ -262,7 +281,7 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
             segmentize(tail ++ List(head), segments, headDuplicated)
         }
 
-      val segments = segmentize(cycle.map(_.payload))
+      val segments = segmentize(cycle)
 
       def scope(s: Scoped) = s.scope match {
         case GlobalScope => "global "
@@ -273,21 +292,21 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
       def barrier(b: Barrier) = b.name.map(n => s"""${scope(b)}barrier "$n"""").getOrElse("unnamed ${scope(b)}barrier")
       def resource(r: Resource) = s"${scope(r)}resource $r"
 
-      def toEnglish(segment: List[Payload]): Iterable[String] = segment match {
-        case Leaf(pre, _) :: Sequencer(seq, _) :: Leaf(post, _) :: Nil =>
+      def toEnglish(segment: List[Vertex]): Iterable[String] = segment match {
+        case LeafVertex(pre, _, _) :: Sequencer(seq, _) :: LeafVertex(post, _, _) :: Nil =>
           Iterable(s"  ${leaf(pre)} must precede ${leaf(post)} due to series ordering in ${branch(seq)}")
-        case Leaf(pre, _) :: ResourcePayload(r, _) :: Leaf(post, _) :: Nil =>
+        case LeafVertex(pre, _, _) :: ResourceVertex(r, _) :: LeafVertex(post, _, _) :: Nil =>
           Iterable(s"  ${leaf(pre)} must precede ${leaf(post)} due to ${resource(r)}")
-        case BarrierPayload(b, _) :: Leaf(post, _) :: Nil =>
+        case BarrierVertex(b, _) :: LeafVertex(post, _, _) :: Nil =>
           Iterable(s"  ${barrier(b)} must precede ${leaf(post)} due to AfterBarrier decoration")
-        case Leaf(pre, _) :: BarrierPayload(b, _) :: Nil =>
+        case LeafVertex(pre, _, _) :: BarrierVertex(b, _) :: Nil =>
           Iterable(s"  ${leaf(pre)} must precede ${barrier(b)} due to BeforeBarrier decoration")
         case _ =>
           val lines =
             segment map { p => p match {
-              case Leaf(l, _) => s"    ${leaf(l)}"
-              case BarrierPayload(b, _) => s"    ${barrier(b)}"
-              case ResourcePayload(r, _) => s"    ${resource(r)}"
+              case LeafVertex(l, _, _) => s"    ${leaf(l)}"
+              case BarrierVertex(b, _) => s"    ${barrier(b)}"
+              case ResourceVertex(r, _) => s"    ${resource(r)}"
               case Sequencer(b, _) => s"    series sequencing node from ${branch(b)}"
               case _ => s"    $p"
             }}
@@ -297,7 +316,7 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
 
       val lines = segments.flatMap(toEnglish).mkString("\n")
 
-      throw new AbortException(s"""circular dependency detected for commander "$commander"\n$lines""")
+      throw new AbortException(s"""circular dependency detected for commander "${root.commanderMultiTree.commander}"\n$lines""")
     }
 
   // This prevents us from running validation more than once (it is immutable, after all).
@@ -308,10 +327,8 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
   // includes looking for cycles.
 
   def validate(): Unit = if ( ! isValidated ) {
-    graph.vertices collect {
-      case pv: PayloadVertex[RunContext, Payload] => (pv, pv.payload)
-    } foreach {
-      case (pv, CommanderHead(CommanderMultiTree(commander, _))) => checkForCycles(pv, commander)
+    graph.vertices foreach {
+      case ch: CommanderHead => checkForCycles(ch)
       case _ =>
     }
 
@@ -322,35 +339,36 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
 
   def toDot(pw: PrintWriter) = {
 
-    def attrs(v: Vertex[RunContext, Payload]): Map[String, Any] =
+    def attrs(v: Vertex): Map[String, Any] =
       v match {
-        case sv: SemaphoreVertex[RunContext, Payload] =>
-          val name = sv.name.getOrElse("<unnamed>")
-          val label = s"$name (${sv.permits})"
-            Map("shape" -> "box", "style" -> "filled", "color" -> "red", "label" -> label)
+//        case sv: SemaphoreVertex =>
+//          val name = sv.name.getOrElse("<unnamed>")
+//          val label = s"$name (${sv.permits})"
+//            Map("shape" -> "box", "style" -> "filled", "color" -> "red", "label" -> label)
 
-        case pv: PayloadVertex[RunContext, Payload] => pv.payload match {
-          case Start =>
-            Map("shape" -> "doublecircle", "label" -> "START")
-          case Finish =>
-            Map("shape" -> "doublecircle", "label" -> "FINISH")
-          case Leaf(l, c) =>
-            Map("shape" -> "box", "style" -> "filled", "label" -> l.mandate.toString)
-          case BranchHead(b, _) =>
-            Map("shape" -> "cds", "style" -> "filled", "color" -> "green", "label" -> b.name.getOrElse("?"))
-          case BranchTail(b, _) =>
-            Map("shape" -> "cds", "style" -> "filled", "color" -> "green", "label" -> b.name.getOrElse("?"), "shape" -> "cds", "orientation" -> 180)
-          case CommanderHead(c) =>
-            Map("shape" -> "cds", "style" -> "filled", "color" -> "purple", "label" -> c.commander.toString, "shape" -> "cds")
-          case CommanderTail(c) =>
-            Map("shape" -> "cds", "style" -> "filled", "color" -> "purple", "label" -> c.commander.toString, "shape" -> "cds", "orientation" -> 180)
-          case BarrierPayload(b, _) =>
-            Map("style" -> "filled", "color" -> "yellow", "label" -> b.name.getOrElse("?"))
-          case ResourcePayload(r, _) =>
-            Map("style" -> "filled", "color" -> "yellow", "label" -> r.toString)
-          case _: Sequencer =>
-            Map("shape" -> "point")
-        }
+        case Start =>
+          Map("shape" -> "doublecircle", "label" -> "START")
+        case Finish =>
+          Map("shape" -> "doublecircle", "label" -> "FINISH")
+        case LeafVertex(l, c, _) =>
+          Map("shape" -> "box", "style" -> "filled", "label" -> l.mandate.toString)
+        case BranchHead(b, _, _) =>
+          Map("shape" -> "cds", "style" -> "filled", "color" -> "green", "label" -> b.name.getOrElse("?"))
+        case BranchTail(b, _, _) =>
+          Map("shape" -> "cds", "style" -> "filled", "color" -> "green", "label" -> b.name.getOrElse("?"), "shape" -> "cds", "orientation" -> 180)
+        case CommanderHead(c) =>
+          Map("shape" -> "cds", "style" -> "filled", "color" -> "purple", "label" -> c.commander.toString, "shape" -> "cds")
+        case CommanderTail(c) =>
+          Map("shape" -> "cds", "style" -> "filled", "color" -> "purple", "label" -> c.commander.toString, "shape" -> "cds", "orientation" -> 180)
+        case BarrierVertex(b, _) =>
+          Map("style" -> "filled", "color" -> "yellow", "label" -> b.name.getOrElse("?"))
+        case ResourceVertex(r, _) =>
+          Map("style" -> "filled", "color" -> "yellow", "label" -> r.toString)
+        case _: Sequencer =>
+          Map("shape" -> "point")
+
+        case FlagVertex(flag, _) =>
+          Map("style" -> "filled", "color" -> "yellow", "label" -> flag.name.getOrElse("FLAG"))
       }
 
     graph.toDot(pw, attrs _)

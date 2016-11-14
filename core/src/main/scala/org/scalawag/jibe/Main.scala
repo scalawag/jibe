@@ -9,6 +9,7 @@ import org.scalawag.jibe.mandate._
 import org.scalawag.jibe.mandate.command.{Group, User}
 import org.scalawag.jibe.multitree._
 import FileUtils._
+import org.scalawag.jibe.report.Report.SUCCESS
 import org.scalawag.jibe.report.cli.TextReport
 import org.scalawag.jibe.report.cli.TextReport.TextReportOptions
 
@@ -48,13 +49,14 @@ object Main {
   )
 
   val usesAptDatabase = CriticalSection(Semaphore(1, Some("apt")))
+  val aptIndexDirty = new Flag(Some("apt index"))
 
   def InstallJava8(updateAptGet: MultiTreeLeaf = UpdateAptGet()) =
     MandateSequence("Install Java 8",
       WriteRemoteFile("/etc/apt/sources.list.d/webupd8team-java-trusty.list",
-                      "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main"),
-      InstallAptKey("keyserver.ubuntu.com", "7B2C3B0889BF5709A105D03AC2518248EEA14886"),
-      updateAptGet.add(usesAptDatabase),
+                      "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main").add(FlagOn(aptIndexDirty, SUCCESS)),
+      InstallAptKey("keyserver.ubuntu.com", "7B2C3B0889BF5709A105D03AC2518248EEA14886").add(FlagOn(aptIndexDirty, SUCCESS)),
+      updateAptGet.add(usesAptDatabase).add(IfFlagged(aptIndexDirty)),
       AcceptJava8License,
       InstallPackage("oracle-java8-installer").add(usesAptDatabase)
     )
@@ -62,14 +64,14 @@ object Main {
   def InstallSbt(updateAptGet: MultiTreeLeaf = UpdateAptGet()) =
     MandateSequence("Install sbt",
       WriteRemoteFile("/etc/apt/sources.list.d/sbt.list",
-                      "deb https://dl.bintray.com/sbt/debian /"),
-      InstallAptKey("keyserver.ubuntu.com", "2EE0EA64E40A89B84B2DF73499E82A75642AC823"),
-      updateAptGet.add(usesAptDatabase),
+                      "deb https://dl.bintray.com/sbt/debian /").add(FlagOn(aptIndexDirty, SUCCESS)),
+      InstallAptKey("keyserver.ubuntu.com", "2EE0EA64E40A89B84B2DF73499E82A75642AC823").add(FlagOn(aptIndexDirty, SUCCESS)),
+      updateAptGet.add(usesAptDatabase).add(IfFlagged(aptIndexDirty)),
       InstallPackage("sbt").add(usesAptDatabase)
     )
 
   def main(args: Array[String]): Unit = {
-    Logging // trigger initialization to get the logging configured
+    Logging.initialize()
 
     val commanders = List(
       "192.168.212.11",

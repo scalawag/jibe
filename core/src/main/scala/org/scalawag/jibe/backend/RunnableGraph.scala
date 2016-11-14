@@ -14,7 +14,8 @@ import java.util.concurrent.{Semaphore => JSemaphore}
 import org.scalawag.jibe.ReadThroughCache
 
 class RunnableGraphFactory {
-  type RunContextType
+  type VisitContextType
+  type VertexType <: Vertex
 
   class Semaphore(val permits: Int = 1, val name: Option[String] = None)
 
@@ -28,9 +29,10 @@ class RunnableGraphFactory {
     // returns None, it means that it still doesn't have enough signals to do its thing.  After it returns Some, the
     // visit() method will not be called again.  Prior to that, every time it is called, it should have more signals
     // available, although this is not enforced.
-    def visit(signals: List[Option[SignalType]])(implicit runContext: RunContextType): Option[StateType]
+    def visit(signals: List[Option[SignalType]])(implicit visitContext: VisitContextType): Option[StateType]
 
-    val semaphores: Set[Semaphore] = Set.empty
+    val semaphoresToAcquire: Set[Semaphore] = Set.empty
+    val semaphoresToRelease: Set[Semaphore] = Set.empty
   }
 
   trait Edge {
@@ -46,11 +48,11 @@ class RunnableGraphFactory {
   object Edge {
     def apply[F <: Vertex, T <: Vertex](f: F, t: T)(implicit signalFn: Try[F#StateType] => T#SignalType) = {
       new Edge {
-        override type FromType = F
-        override type ToType = T
-        override val from = f
-        override val to = t
-        override def signal(fromState: Try[F#StateType]) = signalFn(fromState)
+        final override type FromType = F
+        final override type ToType = T
+        final override val from = f
+        final override val to = t
+        final override def signal(fromState: Try[F#StateType]) = signalFn(fromState)
       }
     }
   }
@@ -125,12 +127,12 @@ class RunnableGraphFactory {
       helper(List(root))
     }
 
-    def run(runContext: RunContextType)(implicit ec: ExecutionContext): Future[Unit] = {
-      val t = new Traversal(runContext)
+    def run(visitContext: VisitContextType)(implicit ec: ExecutionContext): Future[Unit] = {
+      val t = new Traversal(visitContext)
       t.start()
     }
 
-    private[this] class Traversal(visitContext: RunContextType)(implicit ec: ExecutionContext) {
+    private[this] class Traversal(visitContext: VisitContextType)(implicit ec: ExecutionContext) {
 
       // Makes it easier to detect errors where Unit too easily becomes Future[Unit].
       private[this] case class UniqueReturn()
@@ -202,14 +204,14 @@ class RunnableGraphFactory {
         }
 
         private[this] def acquireSemaphores(): Unit =
-          original.semaphores.foreach { s =>
+          original.semaphoresToAcquire.foreach { s =>
             val js = semaphoreMap.getOrCreate(s)
             log.debug(s"acquiring semaphore ${s.name.getOrElse(System.identityHashCode(s))} for vertex $this")
             js.acquire()
           }
 
         private[this] def releaseSemaphores(): Unit =
-          original.semaphores.foreach { s =>
+          original.semaphoresToRelease.foreach { s =>
             val js = semaphoreMap.getOrCreate(s)
             log.debug(s"releasing semaphore ${s.name.getOrElse(System.identityHashCode(s))} for vertex $this")
             js.release()
@@ -231,6 +233,7 @@ class RunnableGraphFactory {
 
         def send(state: Try[original.FromType#StateType]): Future[Set[Try[UniqueReturn]]] = {
           this.signal = Some(original.signal(state))
+          log.debug(s"updating edge signal to ${this.signal} based on state $state")
           this.to.visit()
         }
 

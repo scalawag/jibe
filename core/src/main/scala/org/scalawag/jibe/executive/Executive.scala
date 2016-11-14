@@ -2,12 +2,15 @@ package org.scalawag.jibe.executive
 
 import java.io.File
 import java.text.SimpleDateFormat
+
 import org.scalawag.jibe.FileUtils._
 import org.scalawag.jibe.backend.Commander
+import org.scalawag.jibe.executive.PlanGraphFactory.VisitContext
 import org.scalawag.jibe.multitree.{MultiTree, MultiTreeBranch, MultiTreeId, MultiTreeLeaf}
 import org.scalawag.jibe.report.Report.{BranchReportAttributes, CommanderReportAttributes, LeafReportAttributes, RunReportAttributes}
 import org.scalawag.jibe.report.{LeafReport, Report, RollUpReport}
 import org.scalawag.jibe.report.JsonFormats._
+
 import scala.concurrent.{ExecutionContext, Future}
 
 object Executive {
@@ -85,7 +88,7 @@ object Executive {
 
     val runReport = createRunReport(runDir, plan.commanderMultiTrees)
 
-    plan.runnableGraph.run(RunContext(takeAction, plan.multiTreeIdMap, reportsById)) map { _ =>
+    plan.runnableGraph.run(VisitContext(takeAction, plan.multiTreeIdMap, reportsById)) map { _ =>
       runDir
     }
   }
