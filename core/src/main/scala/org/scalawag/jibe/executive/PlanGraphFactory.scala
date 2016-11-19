@@ -6,6 +6,7 @@ import org.scalawag.jibe.backend.{Commander, MandateExecutionLogging, RunnableGr
 import org.scalawag.jibe.multitree.{MandateExecutionContext, _}
 import org.scalawag.jibe.report.Report._
 import org.scalawag.jibe.report._
+import org.scalawag.timber.api.Logger
 
 import scala.util.{Failure, Success, Try}
 
@@ -13,9 +14,19 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
   override type VisitContextType = VisitContext
   override type VertexType = PlanGraphVertex
 
+  trait VisitListener {
+    def enter(vertex: LeafVertex, status: Report.Status): Unit
+    def exit(vertex: LeafVertex, status: Report.Status): Unit
+    def bypass(vertex: LeafVertex, status: Report.Status): Unit
+  }
+
+  trait LoggerFactory {
+    def getLogger(vertex: LeafVertex): Logger
+  }
+
   case class VisitContext(takeAction: Boolean,
-                          multiTreeIdMaps: Map[Commander, MultiTreeIdMap],
-                          reportsById: Map[(Commander, MultiTreeId), Report])
+                          listener: VisitListener,
+                          logFactory: LoggerFactory)
 
 
   // These are the things that we'll store in the RunnableGraph.
@@ -180,24 +191,19 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
   case class LeafVertex(leaf: MultiTreeLeaf,
                         commander: Commander,
                         semaphores: Set[Semaphore] = Set.empty) extends MultiTreeVertex with CycleSegmentEnd
-  {
+  { vertex =>
     override val semaphoresToAcquire = semaphores
     override val semaphoresToRelease = semaphores
-
-    private[this] def getReport(context: VisitContext) = {
-      val id = context.multiTreeIdMaps(commander).getId(leaf)
-      context.reportsById(commander, id)
-    }
 
     // TODO: maybe combine this method with proceed since they do similar things and require similar parameters.
     override protected def setState(visitContext: VisitContext, state: MultiTreeState) =
       state match {
         case Aborted(_) =>
-          getReport(visitContext).status.mutate(_.copy(status = BLOCKED, leafStatusCounts = Map(BLOCKED -> 1)))
+          visitContext.listener.bypass(this, BLOCKED)
           Some(state)
 
         case BypassedUntil(_, v) =>
-          getReport(visitContext).status.mutate(_.copy(status = SKIPPED, leafStatusCounts = Map(SKIPPED -> 1)))
+          visitContext.listener.bypass(this, SKIPPED)
           Some(state)
 
         case s => Some(s) // I happen to know that nothing calls this method with another state.
@@ -243,12 +249,11 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
         }
 
       def go(visitContext: VisitContext): MultiTreeState = {
-        val report = getReport(visitContext)
 
-        if ( report.status.get.status == PENDING ) {
-          report.status.mutate(_.copy(startTime = Some(System.currentTimeMillis), status = RUNNING, leafStatusCounts = Map(RUNNING -> 1)))
+//        if ( report.status.get.status == PENDING ) {
+          visitContext.listener.enter(vertex, PENDING)
 
-          val log = MandateExecutionLogging.createMandateLogger(report.dir)
+          val log = visitContext.logFactory.getLogger(vertex)
           val mandateExecutionContext = MandateExecutionContext(commander, log)
 
           try {
@@ -260,22 +265,20 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
                   case Some(true) => NotExecuted(UNNEEDED)
                   case _ => NotExecuted(NEEDED)
                 }
-            report.status.mutate(_.copy(endTime = Some(System.currentTimeMillis),
-                                        status = state.reportStatus,
-                                        leafStatusCounts = Map(state.reportStatus -> 1)))
+            visitContext.listener.exit(vertex, state.reportStatus)
             state
           } catch {
             case ex: Exception =>
               log.error(MandateExecutionLogging.ExceptionStackTrace) { pw: PrintWriter =>
                 ex.printStackTrace(pw)
               }
-              report.status.mutate(_.copy(endTime = Some(System.currentTimeMillis), status = FAILURE, leafStatusCounts = Map(FAILURE -> 1)))
+              visitContext.listener.exit(vertex, FAILURE)
               Failed(FAILURE)
           }
 
-        } else {
-          throw new IllegalStateException(s"MandateJob $this on $commander is in an invalid state: ${report.status.get.status}")
-        }
+//        } else {
+//          throw new IllegalStateException(s"MandateJob $this on $commander is in an invalid state: ${report.status.get.status}")
+//        }
       }
     }
 

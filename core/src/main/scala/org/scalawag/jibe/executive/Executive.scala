@@ -4,10 +4,10 @@ import java.io.File
 import java.text.SimpleDateFormat
 
 import org.scalawag.jibe.FileUtils._
-import org.scalawag.jibe.backend.Commander
-import org.scalawag.jibe.executive.PlanGraphFactory.VisitContext
+import org.scalawag.jibe.backend.{Commander, MandateExecutionLogging}
+import org.scalawag.jibe.executive.PlanGraphFactory.{LeafVertex, LoggerFactory, VisitContext, VisitListener}
 import org.scalawag.jibe.multitree.{MultiTree, MultiTreeBranch, MultiTreeId, MultiTreeLeaf}
-import org.scalawag.jibe.report.Report.{BranchReportAttributes, CommanderReportAttributes, LeafReportAttributes, RunReportAttributes}
+import org.scalawag.jibe.report.Report._
 import org.scalawag.jibe.report.{LeafReport, Report, RollUpReport}
 import org.scalawag.jibe.report.JsonFormats._
 
@@ -89,7 +89,27 @@ object Executive {
 
     val runReport = createRunReport(runDir, plan.commanderMultiTrees)
 
-    plan.runnableGraph.run(VisitContext(takeAction, plan.multiTreeIdMap, reportsById)) map { _ =>
+    def getReport(leafVertex: LeafVertex) = {
+      val id = plan.multiTreeIdMap(leafVertex.commander).getId(leafVertex.leaf)
+      reportsById(leafVertex.commander, id)
+    }
+
+    val visitListener = new VisitListener {
+      override def enter(vertex: LeafVertex, status: Status) =
+        getReport(vertex).status.mutate(_.copy(startTime = Some(System.currentTimeMillis), status = status, leafStatusCounts = Map(status -> 1)))
+
+      override def bypass(vertex: LeafVertex, status: Status) =
+        getReport(vertex).status.mutate(_.copy(status = status, leafStatusCounts = Map(status -> 1)))
+
+      override def exit(vertex: LeafVertex, status: Status) =
+        getReport(vertex).status.mutate(_.copy(endTime = Some(System.currentTimeMillis), status = status, leafStatusCounts = Map(status -> 1)))
+    }
+
+    val loggerFactory = new LoggerFactory {
+      override def getLogger(vertex: LeafVertex) = MandateExecutionLogging.createMandateLogger(getReport(vertex).dir)
+    }
+
+    plan.runnableGraph.run(VisitContext(takeAction, visitListener, loggerFactory)) map { _ =>
       runDir
     }
   }
