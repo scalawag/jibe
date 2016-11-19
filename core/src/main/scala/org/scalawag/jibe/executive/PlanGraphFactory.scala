@@ -31,13 +31,15 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
   sealed trait NoopSignalState
   case object Complete extends NoopSignalState
 
-  sealed trait MultiTreeState
-  case object NotExecuted extends MultiTreeState  // no action was taken
-  case object Executed extends MultiTreeState     // an action was taken and succeeded
-  case object Failed extends MultiTreeState       // an action was taken and failed
-  case object Aborted extends MultiTreeState      // no action was taken due to an Abort signal (which will cascade)
+  sealed trait MultiTreeState {
+    val reportStatus: Report.Status
+  }
+  case class NotExecuted(reportStatus: Report.Status) extends MultiTreeState  // no action was taken
+  case class Executed(reportStatus: Report.Status) extends MultiTreeState     // an action was taken and succeeded
+  case class Failed(reportStatus: Report.Status) extends MultiTreeState       // an action was taken and failed
+  case class Aborted(reportStatus: Report.Status) extends MultiTreeState      // no action was taken due to an Abort signal (which will cascade)
   // no action was taken due to bypass signal (which will cascade)
-  case class BypassedUntil(until: MultiTreeVertex) extends MultiTreeState
+  case class BypassedUntil(reportStatus: Report.Status, until: MultiTreeVertex) extends MultiTreeState
 
   sealed trait MultiTreeSignal
   case object Proceed extends MultiTreeSignal
@@ -55,7 +57,7 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
     override def visit(signals: List[Option[MultiTreeSignal]])(implicit visitContext: VisitContext) =
       if ( signals.exists(_ == Some(Abort)) ) {
         // There's at least one Abort signal, we know immediately that we're blocked.
-        setState(visitContext, Aborted)
+        setState(visitContext, Aborted(BLOCKED))
       } else {
         val bypassUntil = signals.collectFirst {
           case s @ Some(BypassUntil(v)) => v
@@ -64,7 +66,7 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
         bypassUntil match {
           case Some(v) =>
             // There's at least one Bypass signal, we know immediately that we're being bypassed.
-            setState(visitContext, BypassedUntil(v))
+            setState(visitContext, BypassedUntil(SKIPPED, v))
 
           case None =>
             if ( signals.exists(_ == None) ) {
@@ -78,7 +80,7 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
       }
 
     protected def setState(visitContext: VisitContext, state: MultiTreeState): Option[MultiTreeState] = Some(state)
-    protected def proceed(visitContext: VisitContext): MultiTreeState = Executed
+    protected def proceed(visitContext: VisitContext): MultiTreeState = Executed(SUCCESS)
   }
 
   // Subgraphs just for convenience when building up a large graph out of smaller graphs.  Using the edge method,
@@ -190,11 +192,11 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
     // TODO: maybe combine this method with proceed since they do similar things and require similar parameters.
     override protected def setState(visitContext: VisitContext, state: MultiTreeState) =
       state match {
-        case Aborted =>
+        case Aborted(_) =>
           getReport(visitContext).status.mutate(_.copy(status = BLOCKED, leafStatusCounts = Map(BLOCKED -> 1)))
           Some(state)
 
-        case BypassedUntil(v) =>
+        case BypassedUntil(_, v) =>
           getReport(visitContext).status.mutate(_.copy(status = SKIPPED, leafStatusCounts = Map(SKIPPED -> 1)))
           Some(state)
 
@@ -250,15 +252,17 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
           val mandateExecutionContext = MandateExecutionContext(commander, log)
 
           try {
-            val (state, outcome) =
+            val state =
               if (visitContext.takeAction)
-                (Executed, takeActionIfNeeded(mandateExecutionContext))
+                Executed(takeActionIfNeeded(mandateExecutionContext))
               else
                 isActionCompleted(mandateExecutionContext) match {
-                  case Some(true) => (NotExecuted, UNNEEDED)
-                  case _ => (NotExecuted, NEEDED)
+                  case Some(true) => NotExecuted(UNNEEDED)
+                  case _ => NotExecuted(NEEDED)
                 }
-            report.status.mutate(_.copy(endTime = Some(System.currentTimeMillis), status = outcome, leafStatusCounts = Map(outcome -> 1)))
+            report.status.mutate(_.copy(endTime = Some(System.currentTimeMillis),
+                                        status = state.reportStatus,
+                                        leafStatusCounts = Map(state.reportStatus -> 1)))
             state
           } catch {
             case ex: Exception =>
@@ -266,7 +270,7 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
                 ex.printStackTrace(pw)
               }
               report.status.mutate(_.copy(endTime = Some(System.currentTimeMillis), status = FAILURE, leafStatusCounts = Map(FAILURE -> 1)))
-              Failed
+              Failed(FAILURE)
           }
 
         } else {
@@ -319,11 +323,11 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
   implicit def reportStatusToMultiTreeSignal(tryStatus: Try[MultiTreeState]): MultiTreeSignal = tryStatus match {
     case Success(state) =>
       state match {
-        case NotExecuted => Proceed
-        case Executed => Proceed
-        case Failed => Abort
-        case Aborted => Abort
-        case BypassedUntil(v) => BypassUntil(v)
+        case NotExecuted(_) => Proceed
+        case Executed(_) => Proceed
+        case Failed(_) => Abort
+        case Aborted(_) => Abort
+        case BypassedUntil(_, v) => BypassUntil(v)
       }
     case Failure(_) => Abort
   }

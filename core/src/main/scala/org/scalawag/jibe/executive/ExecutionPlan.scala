@@ -192,7 +192,7 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
 
       case FlagOn(flag, status) =>
         graph += Edge(subgraph.tail, planFlag(commander, flag)) {
-          case Success(s) if s == status => SetFlag
+          case Success(s) if s.reportStatus == status => SetFlag
           case _ => Abstain
         }
 
@@ -368,7 +368,7 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
           Map("shape" -> "point")
 
         case FlagVertex(flag, _) =>
-          Map("style" -> "filled", "color" -> "yellow", "label" -> flag.name.getOrElse("FLAG"))
+          Map("style" -> "filled", "color" -> "red", "fillcolor" -> "yellow", "label" -> flag.name.getOrElse("FLAG"))
       }
 
     graph.toDot(pw, attrs _)
