@@ -15,7 +15,12 @@ import spray.json._
 import scala.io.Source
 
 class TextReport(pw: PrintWriter, dir: File, options: TextReportOptions) {
-  private[this] case class MultiTreeInfo(id: MultiTreeId, reportDir: File, description: String, status: ReportStatus, children: List[MultiTreeInfo])
+  private[this] case class MultiTreeInfo(id: MultiTreeId,
+                                         pathCount: Int,
+                                         reportDir: File,
+                                         description: String,
+                                         status: ReportStatus,
+                                         children: List[MultiTreeInfo])
 
   private[this] val runDir =
     if ( options.recent ) {
@@ -54,16 +59,16 @@ class TextReport(pw: PrintWriter, dir: File, options: TextReportOptions) {
       val dir = runDir / commander / id.toString
       val status = loadStatus(dir / "status.js")
 
-      val (description, children) =
+      val (pathCount, description, children) =
         if ( ( dir / "leaf.js" ).exists ) {
           val leaf = Source.fromFile(dir / "leaf.js").mkString.parseJson.convertTo[LeafReportAttributes]
-          (leaf.name.getOrElse(leaf.stringRepresentation), Nil)
+          (leaf.pathCount, leaf.name.getOrElse(leaf.stringRepresentation), Nil)
         } else {
           val branch = Source.fromFile(dir / "branch.js").mkString.parseJson.convertTo[BranchReportAttributes]
-          (branch.name.getOrElse(""), branch.children.map(load(commander, _)))
+          (branch.pathCount, branch.name.getOrElse(""), branch.children.map(load(commander, _)))
         }
 
-      val info = MultiTreeInfo(id, dir, description, status, children)
+      val info = MultiTreeInfo(id, pathCount, dir, description, status, children)
 
       cache += (commander, id) -> info
 
@@ -77,7 +82,7 @@ class TextReport(pw: PrintWriter, dir: File, options: TextReportOptions) {
   }
 
   private[this] def writeMultiTreeSummaries(info: MultiTreeInfo, depth: Int): Unit = {
-    writeMultiTreeSummary(s"[${info.id.fingerprint.take(6)}-${info.id.serial}] ${info.description}", info.status, depth)
+    writeMultiTreeSummary(s"[${info.id.fingerprint.take(6)}-${info.id.serial}] (${info.pathCount}) ${info.description}", info.status, depth)
     info.children.foreach(writeMultiTreeSummaries(_, depth + 1))
     if ( options.logs || ( options.errorLogs && ( info.status.status == BLOCKED || info.status.status == FAILURE ) ) ) {
       val log = info.reportDir / "log"

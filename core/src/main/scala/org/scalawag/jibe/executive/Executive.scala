@@ -36,6 +36,8 @@ object Executive {
 
     def createMultiTreeReport(multiTree: MultiTree, commanderDir: File, commander: Commander): (MultiTreeId, Report) = {
       val id = plan.multiTreeIdMap(commander).getId(multiTree)
+      val pathCount = plan.multiTreeIdMap(commander).getPathCount(id)
+
       val key = (commander, id)
       reportsById.get(key).map( id -> _ ) getOrElse {
         val dir = commanderDir / id.toString
@@ -43,15 +45,14 @@ object Executive {
         val report =
           multiTree match {
             case leaf: MultiTreeLeaf =>
-              writeJson(dir / "leaf.js", LeafReportAttributes(id, leaf.name, leaf.mandate.toString))
+              writeJson(dir / "leaf.js", LeafReportAttributes(id, pathCount, leaf.name, leaf.mandate.toString))
 
               new LeafReport(dir)
 
             case branch: MultiTreeBranch =>
 
               val children = branch.contents.map(createMultiTreeReport(_, commanderDir, commander)).toList
-
-              writeJson(dir / "branch.js", BranchReportAttributes(id, branch.name, children.map(_._1)))
+              writeJson(dir / "branch.js", BranchReportAttributes(id, pathCount, branch.name, children.map(_._1)))
 
               // TODO: write immutables: MandateCollectionStatus(id, multiTree.name, children.map(_.status.id))
               new RollUpReport(dir, children.map(_._2))

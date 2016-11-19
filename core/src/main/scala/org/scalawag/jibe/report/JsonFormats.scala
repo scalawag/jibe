@@ -26,6 +26,6 @@ object JsonFormats extends DefaultJsonProtocol {
   implicit val ReportStatusFormat = jsonFormat4(ReportStatus.apply)
   implicit val RunReportAttributesFormat = jsonFormat6(RunReportAttributes.apply)
   implicit val CommanderReportAttributesFormat = jsonFormat2(CommanderReportAttributes.apply)
-  implicit val BranchReportAttributesFormat = jsonFormat3(BranchReportAttributes.apply)
-  implicit val LeafReportAttributesFormat = jsonFormat3(LeafReportAttributes.apply)
+  implicit val BranchReportAttributesFormat = jsonFormat4(BranchReportAttributes.apply)
+  implicit val LeafReportAttributesFormat = jsonFormat4(LeafReportAttributes.apply)
 }

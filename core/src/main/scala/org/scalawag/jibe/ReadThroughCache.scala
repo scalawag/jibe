@@ -10,4 +10,6 @@ class ReadThroughCache[K, V](createFn: K => V) {
       value
     }
   }
+
+  def apply(key: K) = map(key)
 }

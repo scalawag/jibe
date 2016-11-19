@@ -1,5 +1,7 @@
 package org.scalawag.jibe.multitree
 
+import org.scalawag.jibe.ReadThroughCache
+
 import scala.annotation.tailrec
 
 // Assigns a unique ID to each "distinct" MultiTree recursively.  Distinctness is based on the Object.equals method.
@@ -7,7 +9,7 @@ import scala.annotation.tailrec
 // that they are not equal.  Refer to OnlyIdentityEquals.
 
 class MultiTreeIdMap(root: MultiTree) {
-  private[this] val idsByTree = {
+  private[this] val (idsByTree, pathCountsById) = {
     var nextSerial = Map.empty[String, Int]
 
     def nextSerialFor(fingerprint: String): Int = {
@@ -18,7 +20,13 @@ class MultiTreeIdMap(root: MultiTree) {
 
     // Once we finish with the initialization inside this block, this becomes a val (and remains immutable).
 
-    var idsByTree = Map.empty[MultiTree, MultiTreeId]
+    var idsByTree = new ReadThroughCache[MultiTree, MultiTreeId]({ mt =>
+      val fingerprint = mt.fingerprint
+      val serial = nextSerialFor(fingerprint)
+      MultiTreeId(fingerprint, serial)
+    })
+
+    var treesById = Map.empty[MultiTreeId, Int]
 
     @tailrec
     def walkTree(trees: List[MultiTree]): Unit = trees match {
@@ -27,12 +35,8 @@ class MultiTreeIdMap(root: MultiTree) {
         // NOOP, stop recursing
 
       case multiTree :: rest =>
-        if ( ! idsByTree.contains(multiTree) ) {
-          val fingerprint = multiTree.fingerprint
-          val serial = nextSerialFor(fingerprint)
-          val id = MultiTreeId(fingerprint, serial)
-          idsByTree += ( multiTree -> id )
-        }
+        val id = idsByTree.getOrCreate(multiTree)
+        treesById += ( id -> ( treesById.getOrElse(id, 0) + 1 ) )
 
         multiTree match {
           case branch: MultiTreeBranch => walkTree(rest ++ branch.contents)
@@ -42,8 +46,9 @@ class MultiTreeIdMap(root: MultiTree) {
 
     walkTree(List(root))
 
-    idsByTree
+    (idsByTree, treesById)
   }
 
   def getId(tree: MultiTree) = idsByTree(tree)
+  def getPathCount(id: MultiTreeId) = pathCountsById(id)
 }

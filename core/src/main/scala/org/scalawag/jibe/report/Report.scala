@@ -49,10 +49,12 @@ object Report {
                                        root: MultiTreeId)
 
   case class BranchReportAttributes(id: MultiTreeId,
+                                    pathCount: Int,
                                     name: Option[String],
                                     children: List[MultiTreeId])
 
   case class LeafReportAttributes(id: MultiTreeId,
+                                  pathCount: Int,
                                   name: Option[String],
                                   stringRepresentation: String)
 
