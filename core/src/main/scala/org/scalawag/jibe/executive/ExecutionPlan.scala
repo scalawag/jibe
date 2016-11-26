@@ -287,8 +287,8 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
         case GlobalScope => "global "
         case CommanderScope => ""
       }
-      def leaf(l: MultiTreeLeaf) = l.name.map(n => s"""mandate "$n"""").getOrElse(s"mandate ${l.mandate}")
-      def branch(b: MultiTreeBranch) = b.name.map(n => s"""branch "$n"""").getOrElse("unnamed branch")
+      def leaf(l: MultiTreeLeaf) = l.label.map(n => s"""mandate "$n"""").getOrElse(s"mandate ${l.mandate}")
+      def branch(b: MultiTreeBranch) = b.label.map(n => s"""branch "$n"""").getOrElse("unnamed branch")
       def barrier(b: Barrier) = b.name.map(n => s"""${scope(b)}barrier "$n"""").getOrElse("unnamed ${scope(b)}barrier")
       def resource(r: Resource) = s"${scope(r)}resource $r"
 
@@ -353,9 +353,9 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
         case LeafVertex(l, c, _) =>
           Map("shape" -> "box", "style" -> "filled", "label" -> l.mandate.toString)
         case BranchHead(b, _, _) =>
-          Map("shape" -> "cds", "style" -> "filled", "color" -> "green", "label" -> b.name.getOrElse("?"))
+          Map("shape" -> "cds", "style" -> "filled", "color" -> "green", "label" -> b.label.getOrElse("?"))
         case BranchTail(b, _, _) =>
-          Map("shape" -> "cds", "style" -> "filled", "color" -> "green", "label" -> b.name.getOrElse("?"), "shape" -> "cds", "orientation" -> 180)
+          Map("shape" -> "cds", "style" -> "filled", "color" -> "green", "label" -> b.label.getOrElse("?"), "shape" -> "cds", "orientation" -> 180)
         case CommanderHead(c) =>
           Map("shape" -> "cds", "style" -> "filled", "color" -> "purple", "label" -> c.commander.toString, "shape" -> "cds")
         case CommanderTail(c) =>

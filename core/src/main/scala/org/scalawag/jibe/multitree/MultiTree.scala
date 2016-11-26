@@ -5,7 +5,7 @@ import org.scalawag.jibe.multitree.MultiTreeBranch._
 
 sealed trait MultiTree {
   type A <: MultiTree
-  val name: Option[String]
+  val label: Option[String]
   val decorations: Set[MultiTreeDecoration]
 
   val fingerprint: String
@@ -22,15 +22,15 @@ object MultiTree {
 }
 
 case class MultiTreeLeaf(mandate: Mandate,
-                         name: Option[String] = None,
+                         label: Option[String] = None,
                          decorations: Set[MultiTreeDecoration] = Set.empty) extends MultiTree
 {
   override type A = MultiTreeLeaf
 
   override val fingerprint = mandate.fingerprint
 
-  def named(n: String) = this.copy(name = Some(n))
-  def unnamed = this.copy(name = None)
+  def named(n: String) = this.copy(label = Some(n))
+  def unnamed = this.copy(label = None)
   def add(ds: MultiTreeDecoration*) = this.copy(decorations = this.decorations ++ ds)
   def remove(ds: MultiTreeDecoration*) = this.copy(decorations = this.decorations -- ds)
   def unadorned = this.copy(decorations = Set.empty)
@@ -44,7 +44,7 @@ object MultiTreeBranch {
 
 case class MultiTreeBranch(contents: Seq[MultiTree],
                            order: Order = Parallel,
-                           name: Option[String] = None,
+                           label: Option[String] = None,
                            decorations: Set[MultiTreeDecoration] = Set.empty)
   extends MultiTree
 {
@@ -52,8 +52,8 @@ case class MultiTreeBranch(contents: Seq[MultiTree],
 
   override val fingerprint = MD5(contents.map(_.fingerprint).mkString(":"))
 
-  def named(n: String): MultiTreeBranch = this.copy(name = Some(n))
-  def unnamed: MultiTreeBranch = this.copy(name = None)
+  def named(n: String): MultiTreeBranch = this.copy(label = Some(n))
+  def unnamed: MultiTreeBranch = this.copy(label = None)
   def add(ds: MultiTreeDecoration*) = this.copy(decorations = this.decorations ++ ds)
   def remove(ds: MultiTreeDecoration*) = this.copy(decorations = this.decorations -- ds)
   def unadorned = this.copy(decorations = Set.empty)
