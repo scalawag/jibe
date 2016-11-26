@@ -10,8 +10,8 @@ sealed trait MultiTree {
 
   val fingerprint: String
 
-  def named(n: String): A
-  def unnamed: A
+  def labelled(n: String): A
+  def unlabelled: A
   def add(ds: MultiTreeDecoration*): A
   def remove(ds: MultiTreeDecoration*): A
   def unadorned: A
@@ -29,8 +29,8 @@ case class MultiTreeLeaf(mandate: Mandate,
 
   override val fingerprint = mandate.fingerprint
 
-  def named(n: String) = this.copy(label = Some(n))
-  def unnamed = this.copy(label = None)
+  def labelled(n: String) = this.copy(label = Some(n))
+  def unlabelled = this.copy(label = Some(mandate.label))
   def add(ds: MultiTreeDecoration*) = this.copy(decorations = this.decorations ++ ds)
   def remove(ds: MultiTreeDecoration*) = this.copy(decorations = this.decorations -- ds)
   def unadorned = this.copy(decorations = Set.empty)
@@ -52,8 +52,8 @@ case class MultiTreeBranch(contents: Seq[MultiTree],
 
   override val fingerprint = MD5(contents.map(_.fingerprint).mkString(":"))
 
-  def named(n: String): MultiTreeBranch = this.copy(label = Some(n))
-  def unnamed: MultiTreeBranch = this.copy(label = None)
+  def labelled(n: String): MultiTreeBranch = this.copy(label = Some(n))
+  def unlabelled: MultiTreeBranch = this.copy(label = None)
   def add(ds: MultiTreeDecoration*) = this.copy(decorations = this.decorations ++ ds)
   def remove(ds: MultiTreeDecoration*) = this.copy(decorations = this.decorations -- ds)
   def unadorned = this.copy(decorations = Set.empty)

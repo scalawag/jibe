@@ -19,6 +19,12 @@ class RunnableGraphFactory {
 
   class Semaphore(val permits: Int = 1, val name: Option[String] = None)
 
+  trait VisitListener {
+    def onVisit[V <: Vertex](v: V, signals: Iterable[Option[V#SignalType]]): Unit
+    def onState[V <: Vertex](v: V, state: V#StateType): Unit
+    def onSignal[E <: Edge](e: E, signal: E#ToType#SignalType): Unit
+  }
+
   trait Vertex {
     // These are collected on in-edges to determine what the vertex does.
     type SignalType
@@ -53,6 +59,7 @@ class RunnableGraphFactory {
         final override val from = f
         final override val to = t
         final override def signal(fromState: Try[F#StateType]) = signalFn(fromState)
+        final override def toString = s"Edge($from -> $to)"
       }
     }
   }
@@ -127,12 +134,12 @@ class RunnableGraphFactory {
       helper(List(root))
     }
 
-    def run(visitContext: VisitContextType)(implicit ec: ExecutionContext): Future[Unit] = {
-      val t = new Traversal(visitContext)
+    def run(visitContext: VisitContextType, listener: Option[VisitListener] = None)(implicit ec: ExecutionContext): Future[Unit] = {
+      val t = new Traversal(visitContext, listener)
       t.start()
     }
 
-    private[this] class Traversal(visitContext: VisitContextType)(implicit ec: ExecutionContext) {
+    private[this] class Traversal(visitContext: VisitContextType, listener: Option[VisitListener] = None)(implicit ec: ExecutionContext) {
 
       // Makes it easier to detect errors where Unit too easily becomes Future[Unit].
       private[this] case class UniqueReturn()
@@ -176,11 +183,13 @@ class RunnableGraphFactory {
               original.visit(signals)(visitContext)
             } finally {
               releaseSemaphores()
+              listener.foreach(_.onVisit(original, signals))
             }
           }
 
           visitFuture flatMap {
             case Some(state) =>
+              listener.foreach(_.onState(original, state))
               log.debug(s"$this entered state $state, signaling downstream vertices")
               val futures =
                 outs map { e =>
@@ -232,7 +241,9 @@ class RunnableGraphFactory {
         // should happen exactly once for each edge during the traversal.
 
         def send(state: Try[original.FromType#StateType]): Future[Set[Try[UniqueReturn]]] = {
-          this.signal = Some(original.signal(state))
+          val signal = original.signal(state)
+          this.signal = Some(signal)
+          listener.foreach(_.onSignal(original, signal))
           log.debug(s"updating edge signal to ${this.signal} based on state $state")
           this.to.visit()
         }

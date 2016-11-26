@@ -192,22 +192,22 @@ class ExecutionPlan(val commanderMultiTrees: Seq[CommanderMultiTree]) {
 
       case FlagOn(flag, status) =>
         graph += Edge(subgraph.tail, planFlag(commander, flag)) {
-          case Success(s) if s.reportStatus == status => SetFlag
-          case _ => Abstain
+          case Success(s) if s.reportStatus == status => FlagVertex.SetFlag
+          case _ => FlagVertex.Abstain
         }
 
       case IfFlagged(flag) =>
         graph += Edge(planFlag(commander, flag), subgraph.head) {
-          case Success(Flagged) => Proceed
-          case Success(Unflagged) => BypassUntil(subgraph.tail)
-          case Failure(_) => Abort
+          case Success(FlagVertex.Flagged) => MultiTreeVertex.Proceed
+          case Success(FlagVertex.Unflagged) => MultiTreeVertex.BypassUntil(subgraph.tail)
+          case Failure(_) => MultiTreeVertex.Abort
         }
 
       case IfUnflagged(flag) =>
         graph += Edge(planFlag(commander, flag), subgraph.head) {
-          case Success(Flagged) => BypassUntil(subgraph.tail)
-          case Success(Unflagged) => Proceed
-          case Failure(_) => Abort
+          case Success(FlagVertex.Flagged) => MultiTreeVertex.BypassUntil(subgraph.tail)
+          case Success(FlagVertex.Unflagged) => MultiTreeVertex.Proceed
+          case Failure(_) => MultiTreeVertex.Abort
         }
     }
 

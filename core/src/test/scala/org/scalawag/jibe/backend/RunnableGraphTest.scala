@@ -430,8 +430,20 @@ class RunnableGraphTest extends FunSpec with Matchers {
 //    g += Edge(vd, vs)
 //    g += Edge(vs, vd)
 
+    val vl = new VisitListener {
+      override def onVisit[V <: TestRunnableGraphFactory.Vertex](v: V, signals: Iterable[Option[V#SignalType]]) = {
+        println(s"visit: $v $signals")
+      }
+      override def onState[V <: TestRunnableGraphFactory.Vertex](v: V, state: V#StateType)  = {
+        println(s"state: $v $state")
+      }
+      override def onSignal[E <: TestRunnableGraphFactory.Edge](e: E, signal: E#ToType#SignalType)  = {
+        println(s"visit: $e $signal")
+      }
+    }
+
     implicit val visitContext = new TestVisitContext
-    Await.result(g.run(visitContext), Duration.Inf)
+    Await.result(g.run(visitContext, Some(vl)), Duration.Inf)
 
     assertAllNodesVisited(g)
 

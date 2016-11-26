@@ -39,33 +39,33 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
 
   // First, a set of payloads that don't do anything when they're encountered by the RunnableGraph.  They always succeed.
 
-  sealed trait NoopSignalState
-  case object Complete extends NoopSignalState
+  object MultiTreeVertex {
+    sealed trait Signal
+    case object Proceed extends Signal
+    case object Abort extends Signal
+    case class BypassUntil(until: MultiTreeVertex) extends Signal
 
-  sealed trait MultiTreeState {
-    val reportStatus: Report.Status
+    sealed trait State {
+      val reportStatus: Report.Status
+    }
+    case class NotExecuted(reportStatus: Report.Status) extends State  // no action was taken
+    case class Executed(reportStatus: Report.Status) extends State     // an action was taken and succeeded
+    case class Failed(reportStatus: Report.Status) extends State       // an action was taken and failed
+    case class Aborted(reportStatus: Report.Status) extends State      // no action was taken due to an Abort signal (which will cascade)
+    // no action was taken due to bypass signal (which will cascade)
+    case class BypassedUntil(reportStatus: Report.Status, until: MultiTreeVertex) extends State
   }
-  case class NotExecuted(reportStatus: Report.Status) extends MultiTreeState  // no action was taken
-  case class Executed(reportStatus: Report.Status) extends MultiTreeState     // an action was taken and succeeded
-  case class Failed(reportStatus: Report.Status) extends MultiTreeState       // an action was taken and failed
-  case class Aborted(reportStatus: Report.Status) extends MultiTreeState      // no action was taken due to an Abort signal (which will cascade)
-  // no action was taken due to bypass signal (which will cascade)
-  case class BypassedUntil(reportStatus: Report.Status, until: MultiTreeVertex) extends MultiTreeState
-
-  sealed trait MultiTreeSignal
-  case object Proceed extends MultiTreeSignal
-  case object Abort extends MultiTreeSignal
-  case class BypassUntil(until: MultiTreeVertex) extends MultiTreeSignal
 
   // This just means that we know what kind of state it can hold and what kind of signals it can receive.  This is
   // really important for created edges from Subgraphs, as we need to know the signal and state types of the head and
   // tail.  This way, they're all the same (and statically known).
 
   sealed trait MultiTreeVertex extends PlanGraphVertex {
-    override type SignalType = MultiTreeSignal
-    override type StateType = MultiTreeState
+    import MultiTreeVertex._
+    override type SignalType = Signal
+    override type StateType = State
 
-    override def visit(signals: List[Option[MultiTreeSignal]])(implicit visitContext: VisitContext) =
+    override def visit(signals: List[Option[Signal]])(implicit visitContext: VisitContext) =
       if ( signals.exists(_ == Some(Abort)) ) {
         // There's at least one Abort signal, we know immediately that we're blocked.
         setState(visitContext, Aborted(BLOCKED))
@@ -90,8 +90,8 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
         }
       }
 
-    protected def setState(visitContext: VisitContext, state: MultiTreeState): Option[MultiTreeState] = Some(state)
-    protected def proceed(visitContext: VisitContext): MultiTreeState = Executed(SUCCESS)
+    protected def setState(visitContext: VisitContext, state: State): Option[State] = Some(state)
+    protected def proceed(visitContext: VisitContext): State = Executed(SUCCESS)
   }
 
   // Subgraphs just for convenience when building up a large graph out of smaller graphs.  Using the edge method,
@@ -127,13 +127,19 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
   trait SubgraphHead extends MultiTreeVertex
   trait SubgraphTail extends MultiTreeVertex
 
+  object NoopVertex {
+    sealed trait SignalState
+    case object Complete extends SignalState
+  }
+
   trait NoopVertex extends PlanGraphVertex {
-    final override type SignalType = NoopSignalState
-    final override type StateType = NoopSignalState
+    import NoopVertex._
+    final override type SignalType = SignalState
+    final override type StateType = SignalState
 
     // Vertices of this type don't have any work that they need to do themselves, so they just wait around for all
     // of their signals to become available and then enter the Complete state.
-    override def visit(signals: List[Option[NoopSignalState]])(implicit visitContext: VisitContext) =
+    override def visit(signals: List[Option[SignalState]])(implicit visitContext: VisitContext) =
       if ( signals.exists(_.isEmpty) )
         None
       else
@@ -159,20 +165,23 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
 
   case class Sequencer(val branch: MultiTreeBranch, val commander: Commander) extends NoopVertex with OnlyIdentityEquals
 
-  sealed trait FlagSignal
-  case object SetFlag extends FlagSignal
-  case object ClearFlag extends FlagSignal
-  case object Abstain extends FlagSignal
+  object FlagVertex {
+    sealed trait Signal
+    case object SetFlag extends Signal
+    case object ClearFlag extends Signal
+    case object Abstain extends Signal
 
-  sealed trait FlagState
-  case object Flagged extends FlagState
-  case object Unflagged extends FlagState
+    sealed trait State
+    case object Flagged extends State
+    case object Unflagged extends State
+  }
 
   case class FlagVertex(flag: Flag, commander: Option[Commander]) extends PlanGraphVertex {
-    override type SignalType = FlagSignal
-    override type StateType = FlagState
+    import FlagVertex._
+    override type SignalType = Signal
+    override type StateType = State
 
-    override def visit(signals: List[Option[FlagSignal]])(implicit visitContext: VisitContext) =
+    override def visit(signals: List[Option[Signal]])(implicit visitContext: VisitContext) =
       if ( flag.style == ConjunctionFlag && signals.exists(_ == Some(ClearFlag)) )
         // Any ClearFlag signal determines a ConjunctionFlag
         Some(Unflagged)
@@ -186,8 +195,15 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
         Some(Unflagged)
   }
 
-  // This one actually does stuff because it represents a MultiTreeLeaf (that contains a Mandate).
+  case class LeafVertex(leaf: MultiTreeLeaf,
+                        commander: Commander,
+                        semaphores: Set[Semaphore] = Set.empty) extends MultiTreeVertex with CycleSegmentEnd
+  { vertex =>
 
+  }
+
+    // This one actually does stuff because it represents a MultiTreeLeaf (that contains a Mandate).
+/*
   case class LeafVertex(leaf: MultiTreeLeaf,
                         commander: Commander,
                         semaphores: Set[Semaphore] = Set.empty) extends MultiTreeVertex with CycleSegmentEnd
@@ -316,15 +332,17 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
       }
     }
   }
+*/
 
   // Supported edge types, based on state-to-signal propagation.
 
-  implicit def noopStateToMultiTreeSignal(state: Try[NoopSignalState]): MultiTreeSignal = Proceed
+  implicit def noopStateToMultiTreeSignal(state: Try[NoopVertex.SignalState]): MultiTreeVertex.Signal = MultiTreeVertex.Proceed
 
-  implicit def anyToNoopSignal(any: Try[Any]): NoopSignalState = Complete
+  implicit def anyToNoopSignal(any: Try[Any]): NoopVertex.SignalState = NoopVertex.Complete
 
-  implicit def reportStatusToMultiTreeSignal(tryStatus: Try[MultiTreeState]): MultiTreeSignal = tryStatus match {
+  implicit def reportStatusToMultiTreeSignal(tryStatus: Try[MultiTreeVertex.State]): MultiTreeVertex.Signal = tryStatus match {
     case Success(state) =>
+      import MultiTreeVertex._
       state match {
         case NotExecuted(_) => Proceed
         case Executed(_) => Proceed
@@ -332,6 +350,6 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
         case Aborted(_) => Abort
         case BypassedUntil(_, v) => BypassUntil(v)
       }
-    case Failure(_) => Abort
+    case Failure(_) => MultiTreeVertex.Abort
   }
 }

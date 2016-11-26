@@ -4,9 +4,7 @@ import org.scalawag.jibe.ReadThroughCache
 
 import scala.annotation.tailrec
 
-// Assigns a unique ID to each "distinct" MultiTree recursively.  Distinctness is based on the Object.equals method.
-// If you want to use the same Mandate with the same arguments more than once within the same run, you need to ensure
-// that they are not equal.  Refer to OnlyIdentityEquals.
+// Assigns a unique ID to each distinct MultiTree recursively.  Distinctness is based on the instance equality.
 
 class MultiTreeIdMap(root: MultiTree) {
   private[this] val (idsByTree, pathCountsById) = {
