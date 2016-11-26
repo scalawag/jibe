@@ -27,7 +27,7 @@ case class MultiTreeLeaf(mandate: Mandate,
 {
   override type A = MultiTreeLeaf
 
-  override val fingerprint = mandate.mandateFingerprint
+  override val fingerprint = mandate.fingerprint
 
   def named(n: String) = this.copy(name = Some(n))
   def unnamed = this.copy(name = None)

@@ -57,7 +57,9 @@ case object DisjunctionFlag extends FlagStyle
 
 class Flag(val name: Option[String] = None,
            val style: FlagStyle = DisjunctionFlag,
-           override val scope: Scope = CommanderScope) extends Scoped
+           override val scope: Scope = CommanderScope) extends Scoped {
+  override def toString = s"Flag(${name.map(n => s""""$n"""").getOrElse(System.identityHashCode(this))})"
+}
 
 case class FlagOn(flag: Flag, status: Report.Status) extends MultiTreeDecoration
 case class IfFlagged(flag: Flag) extends MultiTreeDecoration

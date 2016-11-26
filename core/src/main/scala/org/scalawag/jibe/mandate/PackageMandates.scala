@@ -13,37 +13,30 @@ object Package {
   def apply(name: String, version: String): Package = new Package(name, Some(version))
 }
 
-object InstallPackage {
-  case class InstallPackage(pkg: Package) extends StatelessMandate with MandateHelpers {
-    override def isActionCompleted(implicit context: MandateExecutionContext) = {
-      runCommand(command.UpdateAptGet(1.day))
-      runCommand(command.IsPackageInstalled(pkg))
-    }
+case class InstallPackage(pkg: Package) extends StatelessMandate with MandateHelpers with CaseClassMandate {
+  override val label = s"install package: ${pkg.name}"
 
-    override def takeAction(implicit context: MandateExecutionContext) = {
-      runCommand(command.UpdateAptGet(1.day))
-      runCommand(command.InstallPackage(pkg))
-    }
+  override val decorations = Set[MultiTreeDecoration](Consequences(PackageResource(pkg.name)))
+
+  override def isActionCompleted(implicit context: MandateExecutionContext) = {
+    runCommand(command.UpdateAptGet(1.day))
+    runCommand(command.IsPackageInstalled(pkg))
   }
 
-  def apply(pkg: Package) = MultiTreeLeaf(
-    mandate = new InstallPackage(pkg),
-    name = Some(s"install package: ${pkg.name}" ),
-    decorations = Set[MultiTreeDecoration](Consequences(PackageResource(pkg.name)))
-  )
+  override def takeAction(implicit context: MandateExecutionContext) = {
+    runCommand(command.UpdateAptGet(1.day))
+    runCommand(command.InstallPackage(pkg))
+  }
 }
 
-object InstallAptKey {
-  case class InstallAptKey(keyserver: String, fingerprint: String) extends StatelessMandate with MandateHelpers {
-    override def isActionCompleted(implicit context: MandateExecutionContext) =
-      runCommand(command.IsAptKeyInstalled(fingerprint))
 
-    override def takeAction(implicit context: MandateExecutionContext) =
-      runCommand(command.InstallAptKey(keyserver, fingerprint))
-  }
+case class InstallAptKey(keyServer: String, keyFingerprint: String) extends StatelessMandate with MandateHelpers with CaseClassMandate {
 
-  def apply(keyserver: String, fingerprint: String) = MultiTreeLeaf(
-    mandate = new InstallAptKey(keyserver, fingerprint),
-    name = Some(s"install apt key: ${fingerprint}" )
-  )
+  override val label = s"install apt key: ${keyFingerprint}"
+
+  override def isActionCompleted(implicit context: MandateExecutionContext) =
+    runCommand(command.IsAptKeyInstalled(keyFingerprint))
+
+  override def takeAction(implicit context: MandateExecutionContext) =
+    runCommand(command.InstallAptKey(keyServer, keyFingerprint))
 }

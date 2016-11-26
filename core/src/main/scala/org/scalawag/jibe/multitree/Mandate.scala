@@ -3,6 +3,8 @@ package org.scalawag.jibe.multitree
 import org.scalawag.jibe.MD5
 import org.scalawag.jibe.mandate.command.Command
 
+import scala.Product1
+
 /** A Mandate is an operation that can be executed against a system.  It may be realized as a series of system-specific
   * commands or it can be an aggregation of several other Mandates.
   *
@@ -12,13 +14,19 @@ import org.scalawag.jibe.mandate.command.Command
   */
 
 trait Mandate {
+  // A short-ish way to represent this mandate in the UI and logs.
+  val label: String
 
-  // Should be the same across runs for any mandate with the same behavior.  Right now, this uses class name and
-  // hashCode to mean that a mandate with the same class and the same arguments is the same mandate.  The hash code
-  // works this way because all the current mandates are case classes.  It has to be overridden to provide similar
-  // functionality for non-case classes.
+  // Decorations that make sense with this mandate by default.
+  val decorations: Set[MultiTreeDecoration] = Set.empty
 
-  val mandateFingerprint = MD5(s"${getClass.getName}:${hashCode}")
+  // The fingerprint should be the same across runs for two mandates with the same behavior.  Normally, that means
+  // two instances of the same Mandate subclass that have the same arguments. This can be achieved by making your
+  // Mandate subclass a case class and using the hashCode (which is derived from the constructor arguments) and the
+  // class name as the fingerprint. If the Madate subclass is not a case class, this behavior needs to be ensured
+  // another way.
+
+  val fingerprint: String
 }
 
 trait StatelessMandate extends Mandate {
@@ -39,6 +47,11 @@ trait MandateHelpers {
   }
 
   protected[this] def caseClassFingerprint = Some
+}
+
+trait CaseClassMandate extends Mandate {
+  override val label: String = this.toString
+  override val fingerprint: String = MD5(s"${getClass.getName}:${hashCode}")
 }
 
 trait OnlyIdentityEquals {

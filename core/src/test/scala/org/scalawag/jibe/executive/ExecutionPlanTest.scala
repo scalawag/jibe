@@ -14,6 +14,8 @@ class ExecutionPlanTest  extends FunSpec with Matchers {
   TestLogging
 
   class TestMandate(name: String) extends StatelessMandate {
+    override val label = name
+    override val fingerprint = name
     override def takeAction(implicit context: MandateExecutionContext) = {}
     override val toString = name
   }

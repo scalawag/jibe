@@ -20,17 +20,18 @@ object Main {
 
   // A few custom mandates for installing java software
 
-  object UpdateAptGet {
-    case class UpdateAptGet() extends StatelessMandate with MandateHelpers with OnlyIdentityEquals {
-      override def takeAction(implicit context: MandateExecutionContext) = runCommand(command.UpdateAptGet(0.seconds))
-    }
-
-    def apply() = MultiTreeLeaf(new UpdateAptGet(), Some("update apt metadata"))
+  case class UpdateAptGet() extends StatelessMandate with MandateHelpers with OnlyIdentityEquals with CaseClassMandate {
+    override val label = "update apt metadata"
+    override def takeAction(implicit context: MandateExecutionContext) = runCommand(command.UpdateAptGet(0.seconds))
   }
 
   // Ad hoc scripting in a mandate
-  val AcceptJava8License = MultiTreeLeaf (
+  val AcceptJava8License =
     new StatelessMandate with MandateHelpers {
+
+      override val label = "Accept Java 8 license"
+      override val fingerprint = MD5(this.getClass.getName)
+
       override def isActionCompleted(implicit context: MandateExecutionContext) =
       context.commander.executeBooleanScript(
       """PATH=/bin:/usr/bin
@@ -44,9 +45,7 @@ object Main {
         |echo oracle-java8-installer shared/accepted-oracle-license-v1-1 select true | /usr/bin/debconf-set-selections
       """.stripMargin.trim
       )
-    },
-    Some("Accept Java 8 license")
-  )
+    }
 
   val usesAptDatabase = CriticalSection(Semaphore(1, Some("apt")))
   val aptIndexDirty = new Flag(Some("apt index"))
@@ -54,20 +53,20 @@ object Main {
   def InstallJava8(updateAptGet: MultiTreeLeaf = UpdateAptGet()) =
     MandateSequence("Install Java 8",
       WriteRemoteFile("/etc/apt/sources.list.d/webupd8team-java-trusty.list",
-                      "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main").add(FlagOn(aptIndexDirty, SUCCESS)),
-      InstallAptKey("keyserver.ubuntu.com", "7B2C3B0889BF5709A105D03AC2518248EEA14886").add(FlagOn(aptIndexDirty, SUCCESS)),
-      updateAptGet.add(usesAptDatabase).add(IfFlagged(aptIndexDirty)),
+                      "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main"),//.add(FlagOn(aptIndexDirty, SUCCESS)),
+      InstallAptKey("keyserver.ubuntu.com", "7B2C3B0889BF5709A105D03AC2518248EEA14886"),//.add(FlagOn(aptIndexDirty, SUCCESS)),
+      updateAptGet.add(usesAptDatabase),//.add(IfFlagged(aptIndexDirty)),
       AcceptJava8License,
-      InstallPackage("oracle-java8-installer").add(usesAptDatabase)
+      InstallPackage("oracle-java8-installer")//.add(usesAptDatabase)
     )
 
   def InstallSbt(updateAptGet: MultiTreeLeaf = UpdateAptGet()) =
     MandateSequence("Install sbt",
       WriteRemoteFile("/etc/apt/sources.list.d/sbt.list",
-                      "deb https://dl.bintray.com/sbt/debian /").add(FlagOn(aptIndexDirty, SUCCESS)),
-      InstallAptKey("keyserver.ubuntu.com", "2EE0EA64E40A89B84B2DF73499E82A75642AC823").add(FlagOn(aptIndexDirty, SUCCESS)),
-      updateAptGet.add(usesAptDatabase).add(IfFlagged(aptIndexDirty)),
-      InstallPackage("sbt").add(usesAptDatabase)
+                      "deb https://dl.bintray.com/sbt/debian /"),//.add(FlagOn(aptIndexDirty, SUCCESS)),
+      InstallAptKey("keyserver.ubuntu.com", "2EE0EA64E40A89B84B2DF73499E82A75642AC823"),//.add(FlagOn(aptIndexDirty, SUCCESS)),
+      updateAptGet.add(usesAptDatabase),//.add(IfFlagged(aptIndexDirty)),
+      InstallPackage("sbt")//.add(usesAptDatabase)
     )
 
   def main(args: Array[String]): Unit = {
@@ -89,7 +88,7 @@ object Main {
       )
 
     def AddUsersToGroup(group: String, users: String*) =
-      MandateSequence(s"add multiple users to group $group", users.map(AddUserToGroups(_, group)):_*)
+      MandateSequence(s"add multiple users to group $group", users.map(AddUserToGroups(_, group):MultiTree):_*)
 
     val mandates1 = MandateSet("do everything",
       CreateEveryoneUser("ernie"),
