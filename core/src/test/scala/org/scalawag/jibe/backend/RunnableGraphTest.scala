@@ -3,14 +3,17 @@ package org.scalawag.jibe.backend
 import java.io.{PrintStream, PrintWriter}
 import java.util.concurrent.{LinkedBlockingQueue, ThreadFactory, ThreadPoolExecutor, TimeUnit}
 
+import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FunSpec, Matchers}
+import org.scalawag.jibe.executive.CapturingVisitListener
 import org.scalawag.jibe.{Logging, TestLogging}
 
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
+//import org.scalamock._
 
-class RunnableGraphTest extends FunSpec with Matchers {
+class RunnableGraphTest extends FunSpec with Matchers with MockFactory {
   TestLogging
 
   sealed trait TestSignal
@@ -430,20 +433,8 @@ class RunnableGraphTest extends FunSpec with Matchers {
 //    g += Edge(vd, vs)
 //    g += Edge(vs, vd)
 
-    val vl = new VisitListener {
-      override def onVisit[V <: TestRunnableGraphFactory.Vertex](v: V, signals: Iterable[Option[V#SignalType]]) = {
-        println(s"visit: $v $signals")
-      }
-      override def onState[V <: TestRunnableGraphFactory.Vertex](v: V, state: V#StateType)  = {
-        println(s"state: $v $state")
-      }
-      override def onSignal[E <: TestRunnableGraphFactory.Edge](e: E, signal: E#ToType#SignalType)  = {
-        println(s"visit: $e $signal")
-      }
-    }
-
     implicit val visitContext = new TestVisitContext
-    Await.result(g.run(visitContext, Some(vl)), Duration.Inf)
+    Await.result(g.run(visitContext), Duration.Inf)
 
     assertAllNodesVisited(g)
 
@@ -455,7 +446,6 @@ class RunnableGraphTest extends FunSpec with Matchers {
     va shouldPrecede vb
     va shouldPrecede vc
     va shouldPrecede vd
-
 
     // The three nodes that are tied to the semaphore should not run concurrently
 
@@ -531,4 +521,23 @@ Logging.log.debug("MARK")
     vc.call.signals shouldBe YouMayProceed
   }
 */
+
+  it ("should use listener properly") {
+    var g = new RunnableGraph
+
+    val va = new TestVertex("a")
+    val vb = new TestVertex("b")
+    val vc = new TestVertex("c")
+    val vd = new TestVertex("d")
+
+    g += Edge(va, vb)
+    g += Edge(va, vc)
+    g += Edge(va, vd)
+
+    val vl = new CapturingVisitListener
+    implicit val visitContext = new TestVisitContext
+    Await.result(g.run(visitContext, Some(vl)), Duration.Inf)
+
+    (vl.onVertex _).when(*, *, *, *).returns(()).once()
+  }
 }

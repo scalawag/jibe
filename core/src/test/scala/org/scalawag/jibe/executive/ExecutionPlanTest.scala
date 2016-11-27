@@ -2,7 +2,7 @@ package org.scalawag.jibe.executive
 
 import org.scalatest.{FunSpec, Matchers}
 import org.scalawag.jibe.{Logging, TestLogging}
-import org.scalawag.jibe.executive.PlanGraphFactory.{LeafVertex, LoggerFactory, VisitContext, VisitListener}
+import org.scalawag.jibe.executive.PlanGraphFactory.{LeafVertex, LoggerFactory, VisitContext, VisitListener2}
 import org.scalawag.jibe.multitree._
 import org.scalawag.jibe.report.Report
 import org.scalawag.jibe.report.Report.{SUCCESS, Status, UNNEEDED}
@@ -29,7 +29,7 @@ class ExecutionPlanTest  extends FunSpec with Matchers {
     val timestamp: Long = System.currentTimeMillis()
   }
 
-  class TestVisitListener extends VisitListener {
+  class TestVisitListener extends VisitListener2 {
     var calls = Seq.empty[VisitListenerCall]
 
     override def enter(vertex: LeafVertex, status: Status) = calls :+= VisitListenerCall(Enter, vertex, status)

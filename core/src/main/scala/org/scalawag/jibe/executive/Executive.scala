@@ -5,7 +5,7 @@ import java.text.SimpleDateFormat
 
 import org.scalawag.jibe.FileUtils._
 import org.scalawag.jibe.backend.{Commander, MandateExecutionLogging}
-import org.scalawag.jibe.executive.PlanGraphFactory.{LeafVertex, LoggerFactory, VisitContext, VisitListener}
+import org.scalawag.jibe.executive.PlanGraphFactory.{LeafVertex, LoggerFactory, VisitContext, VisitListener2}
 import org.scalawag.jibe.multitree.{MultiTree, MultiTreeBranch, MultiTreeId, MultiTreeLeaf}
 import org.scalawag.jibe.report.Report._
 import org.scalawag.jibe.report.{LeafReport, Report, RollUpReport}
@@ -94,7 +94,7 @@ object Executive {
       reportsById(leafVertex.commander, id)
     }
 
-    val visitListener = new VisitListener {
+    val visitListener = new VisitListener2 {
       override def enter(vertex: LeafVertex, status: Status) =
         getReport(vertex).status.mutate(_.copy(startTime = Some(System.currentTimeMillis), status = status, leafStatusCounts = Map(status -> 1)))
 

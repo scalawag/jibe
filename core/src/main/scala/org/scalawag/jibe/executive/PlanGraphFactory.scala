@@ -14,7 +14,7 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
   override type VisitContextType = VisitContext
   override type VertexType = PlanGraphVertex
 
-  trait VisitListener {
+  trait VisitListener2 {
     def enter(vertex: LeafVertex, status: Report.Status): Unit
     def exit(vertex: LeafVertex, status: Report.Status): Unit
     def bypass(vertex: LeafVertex, status: Report.Status): Unit
@@ -25,7 +25,7 @@ private[executive] object PlanGraphFactory extends RunnableGraphFactory {
   }
 
   case class VisitContext(takeAction: Boolean,
-                          listener: VisitListener,
+                          listener: VisitListener2,
                           logFactory: LoggerFactory)
 
 

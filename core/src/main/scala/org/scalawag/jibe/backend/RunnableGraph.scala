@@ -20,9 +20,11 @@ class RunnableGraphFactory {
   class Semaphore(val permits: Int = 1, val name: Option[String] = None)
 
   trait VisitListener {
-    def onVisit[V <: Vertex](v: V, signals: Iterable[Option[V#SignalType]]): Unit
-    def onState[V <: Vertex](v: V, state: V#StateType): Unit
-    def onSignal[E <: Edge](e: E, signal: E#ToType#SignalType): Unit
+    def onVertex[V <: Vertex](v: V,
+                              signals: Iterable[Option[V#SignalType]],
+                              oldState: Option[V#StateType],
+                              newState: Option[V#StateType]): Unit
+    def onEdge[E <: Edge](e: E, signal: E#ToType#SignalType): Unit
   }
 
   trait Vertex {
@@ -183,13 +185,15 @@ class RunnableGraphFactory {
               original.visit(signals)(visitContext)
             } finally {
               releaseSemaphores()
-              listener.foreach(_.onVisit(original, signals))
             }
           }
 
-          visitFuture flatMap {
+          visitFuture map { results =>
+            listener.foreach(_.onVertex(original, signals, state, results))
+            state = results
+            results
+          } flatMap {
             case Some(state) =>
-              listener.foreach(_.onState(original, state))
               log.debug(s"$this entered state $state, signaling downstream vertices")
               val futures =
                 outs map { e =>
@@ -243,7 +247,7 @@ class RunnableGraphFactory {
         def send(state: Try[original.FromType#StateType]): Future[Set[Try[UniqueReturn]]] = {
           val signal = original.signal(state)
           this.signal = Some(signal)
-          listener.foreach(_.onSignal(original, signal))
+          listener.foreach(_.onEdge(original, signal))
           log.debug(s"updating edge signal to ${this.signal} based on state $state")
           this.to.visit()
         }
