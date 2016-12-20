@@ -16,4 +16,12 @@ class StartStopServiceTest extends FunSpec with Matchers with VagrantTest {
     rootCommander.execute(StartService("ufw"))
     rootCommander.execute(IsServiceRunning("ufw")) shouldBe true
   }
+
+  it("Restart ufw service") {
+    rootSsh.exec(log, s"service ufw stop")
+    rootCommander.execute(RestartService("ufw"))
+    rootCommander.execute(IsServiceRunning("ufw")) shouldBe true
+    rootCommander.execute(RestartService("ufw"))
+    rootCommander.execute(IsServiceRunning("ufw")) shouldBe true
+  }
 }

@@ -1,6 +1,5 @@
 package org.scalawag.jibe.mandate
 
-import scala.concurrent.duration._
 import org.scalawag.jibe.mandate.command.CommandArgument
 import org.scalawag.jibe.multitree._
 
@@ -31,7 +30,6 @@ object StartService {
   )
 }
 
-
 object StopService {
   case class StopService(service: Service) extends StatelessMandate with MandateHelpers {
     override def isActionCompleted(implicit context: MandateExecutionContext) = {
@@ -50,3 +48,15 @@ object StopService {
   )
 }
 
+object RestartService {
+  case class RestartService(service: Service) extends StatelessMandate with MandateHelpers {
+    override def takeAction(implicit context: MandateExecutionContext) = {
+      runCommand(command.RestartService(service))
+    }
+  }
+  def apply(service: Service) = MultiTreeLeaf(
+    mandate = new RestartService(service),
+    name = Some(s"restart service: ${service.name}"),
+    decorations = Set[MultiTreeDecoration](Consequences(ServiceResource(service.name)))
+  )
+}
