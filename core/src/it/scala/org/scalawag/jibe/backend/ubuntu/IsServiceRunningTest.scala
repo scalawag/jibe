@@ -18,9 +18,9 @@ class IsServiceRunningTest extends FunSpec with Matchers with VagrantTest {
     rootCommander.execute(IsServiceRunning("ssh")) shouldBe true // true = 0
   }
 
-  it("ufw service needs to be started when it's not running") {
-    rootSsh.exec(log, s"service ufw stop")
-    rootCommander.execute(IsServiceRunning("ufw")) shouldBe false // false = 1
+  it("cron service needs to be started when it's not running") {
+    rootSsh.exec(log, s"service cron stop")
+    rootCommander.execute(IsServiceRunning("cron")) shouldBe false // false = 1
   }
 
 }

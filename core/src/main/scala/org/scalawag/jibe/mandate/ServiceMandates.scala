@@ -37,7 +37,7 @@ object StopService {
     }
 
     override def takeAction(implicit context: MandateExecutionContext) = {
-      runCommand(command.StartService(service))
+      runCommand(command.StopService(service))
     }
   }
 
@@ -50,6 +50,11 @@ object StopService {
 
 object RestartService {
   case class RestartService(service: Service) extends StatelessMandate with MandateHelpers {
+    override def isActionCompleted(implicit context: MandateExecutionContext) = {
+      runCommand(command.IsServiceRunning(service))
+      true
+    }
+
     override def takeAction(implicit context: MandateExecutionContext) = {
       runCommand(command.RestartService(service))
     }
