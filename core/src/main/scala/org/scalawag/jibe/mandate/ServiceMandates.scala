@@ -27,7 +27,7 @@ object StartService {
   def apply(service: Service) = MultiTreeLeaf(
     mandate = new StartService(service),
     name = Some(s"start service: ${service.name}" ),
-    decorations = Set[MultiTreeDecoration](Consequences(PackageResource(service.name)))
+    decorations = Set[MultiTreeDecoration](Consequences(ServiceResource(service.name)))
   )
 }
 
@@ -46,6 +46,7 @@ object StopService {
   def apply(service: Service) = MultiTreeLeaf(
     mandate = new StopService(service),
     name = Some(s"stop service: ${service.name}" ),
-    decorations = Set[MultiTreeDecoration](Consequences(PackageResource(service.name)))
+    decorations = Set[MultiTreeDecoration](Consequences(ServiceResource(service.name)))
   )
 }
+
