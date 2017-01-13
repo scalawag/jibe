@@ -38,7 +38,6 @@ object OutputsTest {
   // TODO: handle reporting/structure/metadata
   // TODO: make the implementation interface prettier
   // TODO: maybe hide HLists as argument lists/tuples
-  // TODO: execute each mandate only once
 
   class MandateReport(val description: String) {
 
