@@ -1,5 +1,6 @@
 package org.scalawag.jibe.outputs
 
+import org.scalawag.jibe.backend.Commander
 import org.scalawag.timber.backend.receiver.ConsoleOutReceiver
 import shapeless._
 
@@ -52,9 +53,16 @@ object OutputsTest {
 //    var roots: MandateReport = ???
   }
 
-  trait MandateInput[A] {
+  trait MandateInput[+A] {
     def dryRunResults: Future[Option[A]]
     def runResults: Future[A]
+  }
+
+  object MandateInput {
+    implicit def fromLiteral[A](a: A) = new MandateInput[A] {
+      override val dryRunResults = Future.successful(Some(a))
+      override val runResults = Future.successful(a)
+    }
   }
 
   trait MandateFactory[IN <: HList, OUT <: HList] { me =>
@@ -205,18 +213,152 @@ object OutputsTest {
     override def create(in: MandateInput[I])(implicit runContext: RunContext) = new GenericMandate(in)
   }
 
+  object MandateLibrary {
+
+    object WriteRemoteFile {
+      case class Input(path: String, content: String)
+
+      object Factory extends SimpleLogicMandateFactory[Input :: HNil, HNil] {
+
+        override def create(in: MandateInput[Input :: HNil])(implicit runContext: RunContext) =
+          new SimpleLogicMandate(in) {
+            override protected[this] def dryRunLogic(in: Input :: HNil)(implicit runContext: RunContext) = {
+              import runContext._
+              log.debug("WRF: see if file is already present")
+              None
+            }
+
+            override protected[this] def runLogic(in: Input :: HNil)(implicit runContext: RunContext) = {
+              import runContext._
+              log.debug("WRF: send the file")
+              HNil
+            }
+
+          }
+      }
+
+      def writeToRemoteFile(in: MandateInput[Input :: HNil])(implicit rc: RunContext) =
+        Factory.create(in)
+    }
+
+    object InstallAptKey {
+      case class Input(keyserver: String, fingerprint: String)
+
+      object Factory extends SimpleLogicMandateFactory[Input :: HNil, HNil] {
+
+        override def create(in: MandateInput[Input :: HNil])(implicit runContext: RunContext) =
+          new SimpleLogicMandate(in) {
+            override protected[this] def dryRunLogic(in: Input :: HNil)(implicit runContext: RunContext) = {
+              import runContext._
+              log.debug(s"IAK: see if apt key ${in.head.fingerprint} is already installed")
+              None
+            }
+
+            override protected[this] def runLogic(in: Input :: HNil)(implicit runContext: RunContext) = {
+              import runContext._
+              log.debug(s"IAK: install the apt key ${in.head.fingerprint}")
+              HNil
+            }
+
+          }
+      }
+
+      def installAptKey(in: MandateInput[Input :: HNil])(implicit rc: RunContext) =
+        Factory.create(in)
+    }
+
+    object UpdateAptGet {
+      case class Input(refreshInterval: Duration)
+
+      object Factory extends SimpleLogicMandateFactory[Input :: HNil, HNil] {
+
+        override def create(in: MandateInput[Input :: HNil])(implicit runContext: RunContext) =
+          new SimpleLogicMandate(in) {
+            override protected[this] def dryRunLogic(in: Input :: HNil)(implicit runContext: RunContext) = {
+              import runContext._
+              log.debug(s"UAG: see if apt-get update has been run within the last ${in.head.refreshInterval}")
+              None
+            }
+
+            override protected[this] def runLogic(in: Input :: HNil)(implicit runContext: RunContext) = {
+              import runContext._
+              log.debug(s"UAG: run apt-get update")
+              HNil
+            }
+          }
+      }
+
+      def updateAptGet(in: MandateInput[Input :: HNil])(implicit rc: RunContext) =
+        Factory.create(in)
+    }
+
+    object InstallPackage {
+      case class Input(name: String, version: Option[String] = None)
+      case class Output(installedVersion: String)
+
+      object Factory extends SimpleLogicMandateFactory[Input :: HNil, Output :: HNil] {
+
+        override def create(in: MandateInput[Input :: HNil])(implicit runContext: RunContext) =
+          new SimpleLogicMandate(in) {
+            override protected[this] def dryRunLogic(in: Input :: HNil)(implicit runContext: RunContext) = {
+              import runContext._
+              log.debug(s"IP: see if package ${in.head} is installed")
+              None
+            }
+
+            override protected[this] def runLogic(in: Input :: HNil)(implicit runContext: RunContext) = {
+              import runContext._
+              log.debug(s"IP: install package ${in.head}")
+              Output("3.2.3") :: HNil
+            }
+          }
+      }
+
+      def installPackage(in: MandateInput[Input :: HNil])(implicit rc: RunContext) =
+        Factory.create(in)
+    }
+
+    object InstallJava8 {
+      case class Input(version: Option[String])
+      case class Output(version: String)
+
+      object Factory extends MandateFactory[Input :: HNil, Output :: HNil] {
+
+        override def create(in: MandateInput[HNil])(implicit runContext: RunContext) = {
+          val wrf =
+            WriteRemoteFile.writeToRemoteFile(
+              WriteRemoteFile.Input("/etc/apt/sources.list.d/webupd8team-java-trusty.list",
+                                    "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main") :: HNil
+            )
+
+          val iak =
+            InstallAptKey.installAptKey(InstallAptKey.Input("keyserver.ubuntu.com", "7B2C3B0889BF5709A105D03AC2518248EEA14886") :: HNil)
+
+          ( wrf join iak )
+
+          val uag =
+            UpdateAptGet.updateAptGet(UpdateAptGet.Input(5 seconds) :: HNil)
+
+          val ip =
+            InstallPackage.installPackage(InstallPackage.Input("oracle-java8-installer") :: HNil)
+
+        }
+      }
+
+      def installJava8(in: MandateInput[Input :: HNil])(implicit rc: RunContext) =
+        Factory.create(in)
+    }
+  }
+
   def main(args: Array[String]): Unit = {
     Logging.initialize()
 
     implicit val rc = new RunContext
 
-    val seed = new MandateInput[HList] {
-      override val dryRunResults = Future.successful(Some(HNil))
-      override val runResults = Future.successful(HNil)
-    }
+    val seed = MandateInput.fromLiteral(HNil)
 
     val af = new GenericMandateFactory[HList, Int :: HNil]("a", 0 seconds, { _ => None }, 3 seconds, { _ => 8 :: HNil})
-    val a = af.create(seed)
+    val a = af.create(HNil)
     val bf = new GenericMandateFactory[Int :: HNil, String :: HNil]("b", 0 seconds, { n => Some( ( "b" * n.head ) :: HNil ) }, 3 seconds, { n => ( "b" * n.head ) :: HNil })
     val m = bf.create(a)
 
