@@ -94,7 +94,7 @@ object OutputsTest {
       }
   }
 
-  abstract class Mandate[MO <: HList](implicit runContext: RunContext) extends MandateInput[MO] {
+  abstract class Mandate[MO <: HList](implicit runContext: RunContext) extends MandateInput[MO] { me =>
     protected[this] def dryRun()(implicit runContext: RunContext): Future[Option[MO]]
     protected[this] def run()(implicit runContext: RunContext): Future[MO]
 
@@ -127,6 +127,28 @@ object OutputsTest {
       }
     }
 */
+
+    def join[YO <: HList](you: Mandate[YO])(implicit prepend: Prepend[MO, YO]) =
+      new Mandate[Prepend[MO, YO]#Out] {
+        override def dryRun()(implicit runContext: RunContext): Future[Option[Prepend[MO, YO]#Out]] = {
+          me.dryRunResults flatMap {
+            case None => Future.successful(None)
+            case Some(mo) =>
+              you.dryRunResults map {
+                case None => None
+                case Some(yo) => Some(mo ::: yo)
+              }
+          }
+        }
+
+      override def run()(implicit runContext: RunContext) = {
+        me.runResults flatMap { mo =>
+          you.runResults map { yo =>
+            mo ::: yo
+          }
+        }
+      }
+    }
   }
 
   trait SimpleLogicMandateFactory[MI <: HList, MO <: HList] extends MandateFactory[MI, MO] {
@@ -195,8 +217,9 @@ object OutputsTest {
     }
 
     val af = new GenericMandateFactory[HList, Int :: HNil]("a", 0 seconds, { _ => None }, 3 seconds, { _ => 8 :: HNil})
+    val a = af.create(seed)
     val bf = new GenericMandateFactory[Int :: HNil, String :: HNil]("b", 0 seconds, { n => Some( ( "b" * n.head ) :: HNil ) }, 3 seconds, { n => ( "b" * n.head ) :: HNil })
-    val m = ( af flatMap bf ).create(seed)
+    val m = bf.create(a)
 
     println(Await.result(m.dryRunResults, Duration.Inf))
 
@@ -205,7 +228,7 @@ object OutputsTest {
     val xf = new GenericMandateFactory[HList, Int :: HNil]("x", 100 millis, { _ =>  Some(6 :: HNil) }, 1 second, { _ => 6 :: HNil })
     val x = xf.create(seed)
 
-    val y = ( af join xf ).create(seed)
+    val y = ( a join xf.create(seed) )
 
     println(Await.result(y.dryRunResults, Duration.Inf))
 
