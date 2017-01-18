@@ -1,8 +1,5 @@
 package org.scalawag.jibe.outputs
 
-import org.scalawag.jibe.outputs.OutputsTest.MandateLibrary.{InstallJava8, InstallSoftware}
-import org.scalawag.jibe.outputs.OutputsTest.MandateLibrary.InstallJava8.Input
-import org.scalawag.timber.backend.receiver.ConsoleOutReceiver
 
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -17,6 +14,7 @@ object Logging {
   import org.scalawag.timber.backend.receiver.buffering.ImmediateFlushing
   import org.scalawag.timber.backend.receiver.formatter.ProgrammableEntryFormatter
   import org.scalawag.timber.backend.receiver.formatter.ProgrammableEntryFormatter.entry
+  import org.scalawag.timber.backend.receiver.ConsoleOutReceiver
 
   def initialize(): Unit = {
     implicit val MyEntryFormatter = new ProgrammableEntryFormatter(Seq(
@@ -39,10 +37,6 @@ object OutputsTest {
   // TODO: handle reporting/structure/metadata
   // TODO: make the implementation interface prettier
   // TODO: maybe hide HLists as argument lists/tuples
-
-  class MandateReport(val description: String) {
-
-  }
 
   // Mandate input should be defined when it's created so that it's output can only be calculated once without fear that
   // the inputs will change.  If a mandate allows multiple calls (with different arguments), then its output can't be
@@ -109,6 +103,9 @@ object OutputsTest {
     lazy val runResults: Future[A] = run()
 
 /*
+    NB: This was an initial implementation that's more complicated but should be correct.  The current implementation
+    NB: (lazy vals above) is much simper but may not be correct in a multithreaded environment.  I need to check that.
+
     private[this] val dryRunResults = new AtomicReference[Option[Future[Option[MO]]]](None)
     private[this] val runResults = new AtomicReference[Option[Future[MO]]](None)
 
@@ -173,6 +170,7 @@ object OutputsTest {
     def join[B](you: Mandate[B]) =
       new Mandate[(A, B)] {
         override def dryRun()(implicit runContext: RunContext): Future[Option[(A, B)]] = {
+          // These need to be done outside of the callback structure below to ensure they happen in parallel.
           val mof = me.dryRunResults
           val yof = you.dryRunResults
           mof flatMap {
@@ -186,6 +184,7 @@ object OutputsTest {
         }
 
       override def run()(implicit runContext: RunContext) = {
+        // These need to be done outside of the callback structure below to ensure they happen in parallel.
         val mof = me.runResults
         val yof = you.runResults
         mof flatMap { mo =>
@@ -447,7 +446,7 @@ object OutputsTest {
 
     println(Await.result(y.runResults, Duration.Inf))
 
-    val j = InstallSoftware.installSoftware()
+    val j = MandateLibrary.InstallSoftware.installSoftware()
     println(Await.result(j.dryRunResults, Duration.Inf))
     println(Await.result(j.runResults, Duration.Inf))
 
