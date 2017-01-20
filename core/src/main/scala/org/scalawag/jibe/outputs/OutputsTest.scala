@@ -102,35 +102,6 @@ object OutputsTest {
     lazy val dryRunResults: Future[Option[A]] = dryRun()
     lazy val runResults: Future[A] = run()
 
-/*
-    NB: This was an initial implementation that's more complicated but should be correct.  The current implementation
-    NB: (lazy vals above) is much simper but may not be correct in a multithreaded environment.  I need to check that.
-
-    private[this] val dryRunResults = new AtomicReference[Option[Future[Option[MO]]]](None)
-    private[this] val runResults = new AtomicReference[Option[Future[MO]]](None)
-
-    def dryRunResults(implicit runContext: RunContext): Future[Option[MO]] = {
-      val p = Promise[Option[MO]]
-      if ( dryRunResults.compareAndSet(None, Some(p.future)) ) {
-        // Kick off the work and make this promise eventually hold the correct value
-        p.completeWith(dryRun())
-        p.future
-      } else {
-        dryRunResults.get.get
-      }
-    }
-
-    def runResults(implicit runContext: RunContext): Future[MO] = {
-      val p = Promise[MO]
-      if ( runResults.compareAndSet(None, Some(p.future)) ) {
-        // Kick off the work and make this promise eventually hold the correct value
-        p.completeWith(run())
-        p.future
-      } else {
-        runResults.get.get
-      }
-    }
-*/
 
     def map[B](fn: A => B): Mandate[B] =
       new Mandate[B] {
