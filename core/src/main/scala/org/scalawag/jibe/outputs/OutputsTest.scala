@@ -75,19 +75,19 @@ object OutputsTest {
     }
   }
 
-  trait MandateFactory[IN, OUT] { me =>
-    def create(in: MandateInput[IN])(implicit runContext: RunContext): Mandate[OUT]
+  trait OpenMandate[IN, OUT] { me =>
+    def bind(in: MandateInput[IN])(implicit runContext: RunContext): Mandate[OUT]
 
-    def flatMap[YOUT](you: MandateFactory[OUT, YOUT]) =
-      new MandateFactory[IN, YOUT] {
-        override def create(in: MandateInput[IN])(implicit runContext: RunContext) =
-          you.create(me.create(in))
+    def flatMap[YOUT](you: OpenMandate[OUT, YOUT]) =
+      new OpenMandate[IN, YOUT] {
+        override def bind(in: MandateInput[IN])(implicit runContext: RunContext) =
+          you.bind(me.bind(in))
       }
 
-    def join[YOUT](you: MandateFactory[IN, YOUT]) =
-      new MandateFactory[IN, (OUT, YOUT)] {
-        override def create(in: MandateInput[IN])(implicit runContext: RunContext) =
-          me.create(in) join you.create(in)
+    def join[YOUT](you: OpenMandate[IN, YOUT]) =
+      new OpenMandate[IN, (OUT, YOUT)] {
+        override def bind(in: MandateInput[IN])(implicit runContext: RunContext) =
+          me.bind(in) join you.bind(in)
       }
   }
 
@@ -144,7 +144,7 @@ object OutputsTest {
         override protected[this] def run()(implicit runContext: RunContext) =
           me.runResults flatMap {
             case Unneeded(mr) => you.runResults
-            case Done(yr) =>
+            case Done(mr) =>
               // We need to return done if this returned Done to indicate that an action was taken.
               you.runResults map {
                 case Done(yr) => Done(yr)
@@ -155,9 +155,9 @@ object OutputsTest {
           }
       }
 
-    def flatMap[B](you: MandateFactory[A, B]): Mandate[B] = you.create(me)
+    def flatMap[B](you: OpenMandate[A, B]): Mandate[B] = you.bind(me)
 
-    def join[B](you: Mandate[B]) =
+    def join[B](you: Mandate[B]): Mandate[(A,B)] =
       new Mandate[(A, B)] {
         override def dryRun()(implicit runContext: RunContext): Future[DryRunResults[(A, B)]] = {
           // These need to be done outside of the callback structure below to ensure they happen in parallel.
@@ -199,35 +199,31 @@ object OutputsTest {
 
   }
 
-  trait SimpleLogicMandateFactory[MI, MO] extends MandateFactory[MI, MO] {
+  abstract class SimpleLogicMandate[MI, MO](upstream: MandateInput[MI])(implicit runContext: RunContext) extends Mandate[MO] {
+    protected[this] def dryRunLogic(in: MI)(implicit runContext: RunContext): DryRunResults[MO]
+    protected[this] def runLogic(in: MI)(implicit runContext: RunContext): RunResults[MO]
 
-    abstract class SimpleLogicMandate(upstream: MandateInput[MI])(implicit runContext: RunContext) extends Mandate[MO] {
-      protected[this] def dryRunLogic(in: MI)(implicit runContext: RunContext): DryRunResults[MO]
-      protected[this] def runLogic(in: MI)(implicit runContext: RunContext): RunResults[MO]
+    override protected[this] def dryRun()(implicit runContext: RunContext) =
+      upstream.dryRunResults flatMap {
+        case c: Completed[MI] => Future(dryRunLogic(c.result))
+        case Blocked => Future.successful(Blocked)
+        case Needed => Future.successful(Needed)
+      }
 
-      override protected[this] def dryRun()(implicit runContext: RunContext) =
-        upstream.dryRunResults flatMap {
-          case c: Completed[MI] => Future(dryRunLogic(c.result))
-          case Blocked => Future.successful(Blocked)
-          case Needed => Future.successful(Needed)
-        }
-
-      override protected[this] def run()(implicit runContext: RunContext) =
-        upstream.runResults flatMap {
-          case c: Completed[MI] => Future(runLogic(c.result))
-          case Blocked => Future.successful(Blocked)
-        }
-    }
-
+    override protected[this] def run()(implicit runContext: RunContext) =
+      upstream.runResults flatMap {
+        case c: Completed[MI] => Future(runLogic(c.result))
+        case Blocked => Future.successful(Blocked)
+      }
   }
 
-  class GenericMandateFactory[I, O](name: String,
-                                    dryRunDelay: FiniteDuration, dryRunLogicFn: I => DryRunResults[O],
-                                    runDelay: FiniteDuration, runLogicFn: I => RunResults[O])
-    extends SimpleLogicMandateFactory[I, O]
+  class GenericOpenMandate[I, O](name: String,
+                             dryRunDelay: FiniteDuration, dryRunLogicFn: I => DryRunResults[O],
+                             runDelay: FiniteDuration, runLogicFn: I => RunResults[O])
+    extends OpenMandate[I, O]
   {
     class GenericMandate(upstream: MandateInput[I])(implicit val runContext: RunContext)
-      extends SimpleLogicMandate(upstream)(runContext)
+      extends SimpleLogicMandate[I, O](upstream)(runContext)
     {
 
       override protected[this] def dryRunLogic(in: I)(implicit runContext: RunContext) = {
@@ -251,7 +247,7 @@ object OutputsTest {
       }
     }
 
-    override def create(in: MandateInput[I])(implicit runContext: RunContext) = new GenericMandate(in)
+    override def bind(in: MandateInput[I])(implicit runContext: RunContext) = new GenericMandate(in)
   }
 
   object MandateLibrary {
@@ -259,171 +255,170 @@ object OutputsTest {
     object WriteRemoteFile {
       case class Input(path: String, content: String)
 
-      object Factory extends SimpleLogicMandateFactory[Input, Unit] {
+      def bind(in: MandateInput[Input])(implicit rc: RunContext): Mandate[Unit] = (new WriteRemoteFile).bind(in)
+    }
 
-        override def create(in: MandateInput[Input])(implicit runContext: RunContext) =
-          new SimpleLogicMandate(in) {
-            override protected[this] def dryRunLogic(in: Input)(implicit runContext: RunContext) = {
-              import runContext._
-              log.debug("WRF: see if file is already present")
-              Needed
-            }
+    class WriteRemoteFile extends OpenMandate[WriteRemoteFile.Input, Unit] {
 
-            override protected[this] def runLogic(in: Input)(implicit runContext: RunContext) = {
-              import runContext._
-              log.debug("WRF: sending the file")
-              Thread.sleep(3000)
-              log.debug("WRF: file sent")
-              Done(())
-            }
+      override def bind(in: MandateInput[WriteRemoteFile.Input])(implicit runContext: RunContext) =
+        new SimpleLogicMandate[WriteRemoteFile.Input, Unit](in) {
+          override protected[this] def dryRunLogic(in: WriteRemoteFile.Input)(implicit runContext: RunContext) = {
+            import runContext._
+            log.debug("WRF: see if file is already present")
+            Needed
           }
-      }
 
-      def writeToRemoteFile(in: MandateInput[Input])(implicit rc: RunContext) =
-        Factory.create(in)
+          override protected[this] def runLogic(in: WriteRemoteFile.Input)(implicit runContext: RunContext) = {
+            import runContext._
+            log.debug("WRF: sending the file")
+            Thread.sleep(3000)
+            log.debug("WRF: file sent")
+            Done(())
+          }
+        }
     }
 
     object InstallAptKey {
       case class Input(keyserver: String, fingerprint: String)
 
-      object Factory extends SimpleLogicMandateFactory[Input, Unit] {
+      def bind(in: MandateInput[Input])(implicit rc: RunContext) = (new InstallAptKey).bind(in)
+    }
 
-        override def create(in: MandateInput[Input])(implicit runContext: RunContext) =
-          new SimpleLogicMandate(in) {
-            override protected[this] def dryRunLogic(in: Input)(implicit runContext: RunContext) = {
-              import runContext._
-              log.debug(s"IAK: see if apt key ${in.fingerprint} is already installed")
-              Needed
-            }
-
-            override protected[this] def runLogic(in: Input)(implicit runContext: RunContext) = {
-              import runContext._
-              log.debug(s"IAK: install the apt key ${in.fingerprint}")
-              Thread.sleep(3000)
-              log.debug("IAK: installed key")
-              Done(())
-            }
+    class InstallAptKey extends OpenMandate[InstallAptKey.Input, Unit] {
+      override def bind(in: MandateInput[InstallAptKey.Input])(implicit runContext: RunContext): Mandate[Unit] =
+        new SimpleLogicMandate[InstallAptKey.Input, Unit](in) {
+          override protected[this] def dryRunLogic(in: InstallAptKey.Input)(implicit runContext: RunContext) = {
+            import runContext._
+            log.debug(s"IAK: see if apt key ${in.fingerprint} is already installed")
+            Needed
           }
-      }
 
-      def installAptKey(in: MandateInput[Input])(implicit rc: RunContext) =
-        Factory.create(in)
+          override protected[this] def runLogic(in: InstallAptKey.Input)(implicit runContext: RunContext) = {
+            import runContext._
+            log.debug(s"IAK: install the apt key ${in.fingerprint}")
+            Thread.sleep(3000)
+            log.debug("IAK: installed key")
+            Done(())
+          }
+        }
     }
 
     object UpdateAptGet {
       case class Input(refreshInterval: Duration)
 
-      object Factory extends SimpleLogicMandateFactory[Input, Unit] {
+      def bind(in: MandateInput[Input])(implicit rc: RunContext) = (new UpdateAptGet).bind(in)
+    }
 
-        override def create(in: MandateInput[Input])(implicit runContext: RunContext) =
-          new SimpleLogicMandate(in) {
-            override protected[this] def dryRunLogic(in: Input)(implicit runContext: RunContext) = {
-              import runContext._
-              log.debug(s"UAG: see if apt-get update has been run within the last ${in.refreshInterval}")
-              Needed
-            }
+    class UpdateAptGet extends OpenMandate[UpdateAptGet.Input, Unit] {
 
-            override protected[this] def runLogic(in: Input)(implicit runContext: RunContext) = {
-              import runContext._
-              log.debug(s"UAG: run apt-get update")
-              Thread.sleep(3000)
-              log.debug("UAG: ran apt-get update")
-              Done(())
-            }
+      override def bind(in: MandateInput[UpdateAptGet.Input])(implicit runContext: RunContext) =
+        new SimpleLogicMandate[UpdateAptGet.Input, Unit](in) {
+          override protected[this] def dryRunLogic(in: UpdateAptGet.Input)(implicit runContext: RunContext) = {
+            import runContext._
+            log.debug(s"UAG: see if apt-get update has been run within the last ${in.refreshInterval}")
+            Needed
           }
-      }
 
-      def updateAptGet(in: MandateInput[Input])(implicit rc: RunContext) =
-        Factory.create(in)
+          override protected[this] def runLogic(in: UpdateAptGet.Input)(implicit runContext: RunContext) = {
+            import runContext._
+            log.debug(s"UAG: run apt-get update")
+            Thread.sleep(3000)
+            log.debug("UAG: ran apt-get update")
+            Done(())
+          }
+        }
     }
 
     object InstallPackage {
       case class Input(name: String, version: Option[String] = None)
       case class Output(installedVersion: String)
 
-      object Factory extends SimpleLogicMandateFactory[Input, Output] {
+      def bind(in: MandateInput[Input])(implicit rc: RunContext) = (new InstallPackage).bind(in)
+    }
 
-        override def create(in: MandateInput[Input])(implicit runContext: RunContext) =
-          new SimpleLogicMandate(in) {
-            override protected[this] def dryRunLogic(in: Input)(implicit runContext: RunContext) = {
-              import runContext._
-              log.debug(s"IP: see if package ${in} is installed")
-              Needed
-            }
+    class InstallPackage extends OpenMandate[InstallPackage.Input, InstallPackage.Output] {
 
-            override protected[this] def runLogic(in: Input)(implicit runContext: RunContext) = {
-              import runContext._
-              log.debug(s"IP: install package ${in}")
-              Thread.sleep(3000)
-              log.debug(s"IP: installed package $in")
-              Done(Output("3.2.3"))
-            }
+      override def bind(in: MandateInput[InstallPackage.Input])(implicit runContext: RunContext) =
+        new SimpleLogicMandate[InstallPackage.Input, InstallPackage.Output](in) {
+          override protected[this] def dryRunLogic(in: InstallPackage.Input)(implicit runContext: RunContext) = {
+            import runContext._
+            log.debug(s"IP: see if package $in is installed")
+            Needed
           }
-      }
 
-      def installPackage(in: MandateInput[Input])(implicit rc: RunContext) =
-        Factory.create(in)
+          override protected[this] def runLogic(in: InstallPackage.Input)(implicit runContext: RunContext) = {
+            import runContext._
+            log.debug(s"IP: install package $in")
+            Thread.sleep(3000)
+            log.debug(s"IP: installed package $in")
+            Done(InstallPackage.Output(in.version.getOrElse("1.0.0")))
+          }
+        }
     }
 
     object InstallJava8 {
       case class Input(version: Option[String] = None)
       case class Output(version: String)
 
-      object Factory extends MandateFactory[Input, Output] {
+      def bind(in: MandateInput[Input] = Input())(implicit rc: RunContext) = (new InstallJava8).bind(in)
+    }
 
-        override def create(in: MandateInput[Input])(implicit runContext: RunContext) = {
-          val wrf =
-            WriteRemoteFile.writeToRemoteFile(
-              WriteRemoteFile.Input("/etc/apt/sources.list.d/webupd8team-java-trusty.list",
-                                    "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main")
+    class InstallJava8 extends OpenMandate[InstallJava8.Input, InstallJava8.Output] {
+
+      override def bind(in: MandateInput[InstallJava8.Input])(implicit runContext: RunContext) = {
+        val wrf =
+          WriteRemoteFile.bind(
+            WriteRemoteFile.Input(
+              "/etc/apt/sources.list.d/webupd8team-java-trusty.list",
+              "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main"
             )
+          )
 
-          val iak =
-            InstallAptKey.installAptKey(InstallAptKey.Input("keyserver.ubuntu.com", "7B2C3B0889BF5709A105D03AC2518248EEA14886"))
+        val iak =
+          InstallAptKey.bind(InstallAptKey.Input("keyserver.ubuntu.com", "7B2C3B0889BF5709A105D03AC2518248EEA14886"))
 
-          ( wrf join iak ) flatMap
-            UpdateAptGet.updateAptGet(UpdateAptGet.Input(5 seconds)) flatMap
-            InstallPackage.installPackage(InstallPackage.Input("oracle-java8-installer")) map { v =>
-            Output(v.installedVersion)
+        ( wrf join iak ) flatMap
+          UpdateAptGet.bind(UpdateAptGet.Input(5 seconds)) flatMap
+          InstallPackage.bind(InstallPackage.Input("oracle-java8-installer")) map { v =>
+            InstallJava8.Output(v.installedVersion)
           }
-        }
       }
-
-      def installJava8(in: MandateInput[Input] = Input())(implicit rc: RunContext) =
-        Factory.create(in)
     }
 
     object InstallSbt {
       case class Input(version: Option[String] = None)
       case class Output(version: String)
 
-      object Factory extends MandateFactory[Input, Output] {
+      def bind(in: MandateInput[Input] = Input())(implicit rc: RunContext) = (new InstallSbt).bind(in)
+    }
 
-        override def create(in: MandateInput[Input])(implicit runContext: RunContext) = {
-          val wrf =
-            WriteRemoteFile.writeToRemoteFile(
-              WriteRemoteFile.Input("/etc/apt/sources.list.d/webupd8team-java-trusty.list",
-                "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main")
+    class InstallSbt extends OpenMandate[InstallSbt.Input, InstallSbt.Output] {
+
+      override def bind(in: MandateInput[InstallSbt.Input])(implicit runContext: RunContext) = {
+        val wrf =
+          WriteRemoteFile.bind(
+            WriteRemoteFile.Input(
+              "/etc/apt/sources.list.d/webupd8team-java-trusty.list",
+              "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main"
             )
+          )
 
-          val iak =
-            InstallAptKey.installAptKey(InstallAptKey.Input("keyserver.ubuntu.com", "7B2C3B5889BF5709A105D03AC2518248EEA14886"))
+        val iak =
+          InstallAptKey.bind(InstallAptKey.Input("keyserver.ubuntu.com", "7B2C3B5889BF5709A105D03AC2518248EEA14886"))
 
-          ( wrf join iak ) flatMap
-            UpdateAptGet.updateAptGet(UpdateAptGet.Input(5 seconds)) flatMap
-            InstallPackage.installPackage(InstallPackage.Input("sbt")) map { v =>
-            Output(v.installedVersion)
+        ( wrf join iak ) flatMap
+          UpdateAptGet.bind(UpdateAptGet.Input(5 seconds)) flatMap
+          InstallPackage.bind(InstallPackage.Input("sbt", Some("0.13.1"))) map { v =>
+            InstallSbt.Output(v.installedVersion)
           }
-        }
       }
-
-      def installSbt(in: MandateInput[Input] = Input())(implicit rc: RunContext) =
-        Factory.create(in)
     }
 
     object InstallSoftware {
       def installSoftware()(implicit rc: RunContext) = {
-        InstallJava8.installJava8() join InstallSbt.installSbt()
+        val m1 = InstallJava8.bind()
+        val m2 = InstallSbt.bind()
+        m1 join m2
       }
     }
   }
@@ -435,19 +430,19 @@ object OutputsTest {
 
     val seed = MandateInput.fromLiteral(())
 
-    val af = new GenericMandateFactory[Unit, Int]("a", 0 seconds, { _ => Needed }, 3 seconds, { _ => Done(8)})
-    val a = af.create(())
-    val bf = new GenericMandateFactory[Int, String]("b", 0 seconds, { n => Unneeded( ( "b" * n ) ) }, 3 seconds, { n => Done( "b" * n ) })
-    val m = bf.create(a)
+    val af = new GenericOpenMandate[Unit, Int]("a", 0 seconds, { _ => Needed }, 3 seconds, { _ => Done(8)})
+    val a = af.bind(())
+    val bf = new GenericOpenMandate[Int, String]("b", 0 seconds, { n => Unneeded( ( "b" * n ) ) }, 3 seconds, { n => Done( "b" * n ) })
+    val m = bf.bind(a)
 
     println(Await.result(m.dryRunResults, Duration.Inf))
 
     println(Await.result(m.runResults, Duration.Inf))
 
-    val xf = new GenericMandateFactory[Unit, Int]("x", 100 millis, { _ =>  Unneeded(6) }, 1 second, { _ => Done(6) })
-    val x = xf.create(seed)
+    val xf = new GenericOpenMandate[Unit, Int]("x", 100 millis, { _ =>  Unneeded(6) }, 1 second, { _ => Done(6) })
+    val x = xf.bind(seed)
 
-    val y = ( a join xf.create(seed) )
+    val y = ( a join xf.bind(seed) )
 
     println(Await.result(y.dryRunResults, Duration.Inf))
 
