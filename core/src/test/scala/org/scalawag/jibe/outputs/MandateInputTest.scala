@@ -1,7 +1,5 @@
 package org.scalawag.jibe.outputs
 
-import scala.language.reflectiveCalls
-
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FunSpec, Matchers}
 
@@ -16,32 +14,24 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
 
     def testDryRunResultCombination[A](ar: Try[DryRun.Result[A]], br: Try[DryRun.Result[A]], jr: Try[DryRun.Result[A]]) =
       it(s"should return $jr if the inputs are $ar and $br") {
-        val a = new MandateInput[A] {
+
+        class TestMandateInput(r: Try[DryRun.Result[A]]) extends MandateInput[A] {
           var callCount = 0
 
           override def dryRunResult = {
             callCount += 1
-            ar match {
+            r match {
               case Success(x) => Future.successful(x)
               case Failure(x) => Future.failed(x)
             }
           }
+
           override def runResult = ???
         }
 
-        val b = new MandateInput[A] {
-          var callCount = 0
 
-          override def dryRunResult = {
-            callCount += 1
-            br match {
-              case Success(x) => Future.successful(x)
-              case Failure(x) => Future.failed(x)
-            }
-          }
-          override def runResult = ???
-        }
-
+        val a = new TestMandateInput(ar)
+        val b = new TestMandateInput(br)
         val m = a join b
 
         Await.ready(m.dryRunResult, Duration.Inf)
@@ -87,31 +77,23 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
 
     def testRunResultCombination[A](ar: Try[Run.Result[A]], br: Try[Run.Result[A]], jr: Try[Run.Result[A]]) =
       it(s"should return $jr if the inputs are $ar and $br") {
-        val a = new MandateInput[A] {
+
+        class TestMandateInput(r: Try[Run.Result[A]]) extends MandateInput[A] {
           var callCount = 0
 
           override def dryRunResult = ???
           override def runResult = {
             callCount += 1
-            ar match {
+            r match {
               case Success(x) => Future.successful(x)
               case Failure(x) => Future.failed(x)
             }
           }
         }
 
-        val b = new MandateInput[A] {
-          var callCount = 0
-          override def dryRunResult = ???
-          override def runResult = {
-            callCount += 1
-            br match {
-              case Success(x) => Future.successful(x)
-              case Failure(x) => Future.failed(x)
-            }
-          }
-        }
 
+        val a = new TestMandateInput(ar)
+        val b = new TestMandateInput(br)
         val m = a join b
 
         Await.ready(m.runResult, Duration.Inf)
