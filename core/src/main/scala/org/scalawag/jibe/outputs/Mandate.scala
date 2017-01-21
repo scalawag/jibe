@@ -10,6 +10,6 @@ abstract class Mandate[A](implicit runContext: RunContext) extends MandateInput[
   protected[this] def dryRun()(implicit runContext: RunContext): Future[DryRun.Result[A]]
   protected[this] def run()(implicit runContext: RunContext): Future[Run.Result[A]]
 
-  lazy val dryRunResults: Future[DryRun.Result[A]] = dryRun()
-  lazy val runResults: Future[Run.Result[A]] = run()
+  lazy val dryRunResult: Future[DryRun.Result[A]] = dryRun()
+  lazy val runResult: Future[Run.Result[A]] = run()
 }

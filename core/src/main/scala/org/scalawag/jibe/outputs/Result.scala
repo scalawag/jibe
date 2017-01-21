@@ -28,12 +28,16 @@ object Run {
     def flatMap[B](fn: A => Result[B]): Result[B]
   }
 
-  case class Unneeded[A](output: A) extends Result[A] {
+  trait Completed[+A] extends Result[A] {
+    val output: A
+  }
+
+  case class Unneeded[A](output: A) extends Completed[A] {
     override def map[B](fn: A => B): Result[B] = Unneeded(fn(output))
     override def flatMap[B](fn: A => Result[B]): Result[B] = fn(output)
   }
   
-  case class Done[A](output: A) extends Result[A] {
+  case class Done[A](output: A) extends Completed[A] {
     override def map[B](fn: A => B): Result[B] = Done(fn(output))
     override def flatMap[B](fn: A => Result[B]): Result[B] = fn(output)
   }

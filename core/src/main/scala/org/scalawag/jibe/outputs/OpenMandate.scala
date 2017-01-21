@@ -1,17 +1,18 @@
 package org.scalawag.jibe.outputs
 
-import scala.concurrent.ExecutionContext
-
 trait OpenMandate[IN, OUT] { me =>
+  /** Binds this open mandate to a given input, producing a mandate which is ready to be executed. */
   def bind(in: MandateInput[IN])(implicit runContext: RunContext): Mandate[OUT]
 
+  /** Creates a new OpenMandate that binds the output of this one to the specified one. */
   def flatMap[YOUT](you: OpenMandate[OUT, YOUT]) =
     new OpenMandate[IN, YOUT] {
       override def bind(in: MandateInput[IN])(implicit runContext: RunContext) =
         you.bind(me.bind(in))
     }
 
-  def join[YOUT](you: OpenMandate[IN, YOUT])(implicit executionContext: ExecutionContext) =
+  /** Creates a new OpenMandate that, when bound, will produce two joined mandates (executed in parallel). */
+  def join[YOUT](you: OpenMandate[IN, YOUT]) =
     new OpenMandate[IN, (OUT, YOUT)] {
       override def bind(in: MandateInput[IN])(implicit runContext: RunContext) =
         me.bind(in) join you.bind(in)
