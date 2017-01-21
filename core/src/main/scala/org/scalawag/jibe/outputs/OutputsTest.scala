@@ -47,54 +47,9 @@ object OutputsTest {
 //    var roots: MandateReport = ???
   }
 
-  sealed trait MandateResults[+A] {
-    type ResultsType <: MandateResults[A]
-  }
-
-  trait DryRunResults[+A] extends MandateResults[A] {
-    def map[B](fn: A => B): DryRunResults[B]
-    def flatMap[B](fn: A => DryRunResults[B]): DryRunResults[B]
-  }
-
-  trait RunResults[+A] extends MandateResults[A] {
-    def map[B](fn: A => B): RunResults[B]
-    def flatMap[B](fn: A => RunResults[B]): DryRunResults[B]
-  }
-
-  trait Completed[+A] extends MandateResults[A] {
-    val result: A
-
-    def map[B](fn: A => B): DryRunResults[B] = this match {
-      case Unneeded(r) => Unneeded(fn(r))
-      case Done(r) => Done(fn(r))
-    }
-    def flatMap[B](fn: A => DryRunResults[B]): DryRunResults[B] = fn(result)
-  }
-
-  case object Needed extends DryRunResults[Nothing] {
-    override def map[B](fn: (Nothing) => B) = Needed
-    override def flatMap[B](fn: (Nothing) => DryRunResults[B]) = Needed
-  }
-
-  case class Unneeded[A](override val result: A) extends DryRunResults[A] with RunResults[A] with Completed[A] {
-    override def map[B](fn: A => B): DryRunResults[B] = Unneeded(fn(result))
-    override def flatMap[B](fn: A => DryRunResults[B]): DryRunResults[B] = fn(result)
-  }
-
-  case class Done[A](override val result: A) extends RunResults[A] with Completed[A] {
-    override def map[B](fn: A => B): RunResults[B] = Done(fn(result))
-    override def flatMap[B](fn: A => RunResults[B]): RunResults[B] = fn(result)
-  }
-
-//  case object Skipped extends DryRunResults[Nothing] with RunResults[Nothing] // TODO: this may be replaced by absence in the report
-  case object Blocked extends DryRunResults[Nothing] with RunResults[Nothing] {
-    override def map[B](fn: Nothing => B): RunResults[B] = Blocked
-    override def flatMap[B](fn: (Nothing) => DryRunResults[B]) = Blocked
-  }
-
   trait MandateInput[+A] { me =>
-    def dryRunResults: Future[DryRunResults[A]]
-    def runResults: Future[RunResults[A]]
+    def dryRunResults: Future[DryRun.Result[A]]
+    def runResults: Future[Run.Result[A]]
 
     def map[B](fn: A => B)(implicit runContext: RunContext): Mandate[B] =
       new Mandate[B] {
@@ -130,14 +85,17 @@ object OutputsTest {
 
     def flatMap[B](you: Mandate[B])(implicit runContext: RunContext): Mandate[B] =
       new Mandate[B] {
-        override protected[this] def dryRun()(implicit runContext: RunContext) =
+        override protected[this] def dryRun()(implicit runContext: RunContext) = {
+          import DryRun._
           me.dryRunResults flatMap {
             case Unneeded(r) => you.dryRunResults
             case Needed => Future.successful(Needed)
             case Blocked => Future.successful(Blocked)
           }
+        }
 
-        override protected[this] def run()(implicit runContext: RunContext) =
+        override protected[this] def run()(implicit runContext: RunContext) = {
+          import Run._
           me.runResults flatMap {
             case Unneeded(mr) => you.runResults
             case Done(mr) =>
@@ -149,13 +107,15 @@ object OutputsTest {
               }
             case Blocked => Future.successful(Blocked)
           }
+        }
       }
 
     def flatMap[C >: A, B](you: OpenMandate[C, B])(implicit runContext: RunContext): Mandate[B] = you.bind(me)
 
     def join[C >: A, B](you: Mandate[B])(implicit runContext: RunContext): Mandate[(C,B)] =
       new Mandate[(C, B)] {
-        override def dryRun()(implicit runContext: RunContext): Future[DryRunResults[(A, B)]] = {
+        override def dryRun()(implicit runContext: RunContext): Future[DryRun.Result[(A, B)]] = {
+          import DryRun._
           // These need to be done outside of the callback structure below to ensure they happen in parallel.
           val lf = me.dryRunResults
           val rf = you.dryRunResults
@@ -172,6 +132,7 @@ object OutputsTest {
         }
 
         override def run()(implicit runContext: RunContext) = {
+          import Run._
           // These need to be done outside of the callback structure below to ensure they happen in parallel.
           val lf = me.runResults
           val rf = you.runResults
@@ -197,8 +158,8 @@ object OutputsTest {
 
   object MandateInput {
     implicit def fromLiteral[A](a: A): MandateInput[A] = new MandateInput[A] {
-      override val dryRunResults = Future.successful(Unneeded(a))
-      override val runResults = Future.successful(Unneeded(a))
+      override val dryRunResults = Future.successful(DryRun.Unneeded(a))
+      override val runResults = Future.successful(Run.Unneeded(a))
     }
   }
 
@@ -219,11 +180,11 @@ object OutputsTest {
   }
 
   abstract class Mandate[A](implicit runContext: RunContext) extends MandateInput[A] { me =>
-    protected[this] def dryRun()(implicit runContext: RunContext): Future[DryRunResults[A]]
-    protected[this] def run()(implicit runContext: RunContext): Future[RunResults[A]]
+    protected[this] def dryRun()(implicit runContext: RunContext): Future[DryRun.Result[A]]
+    protected[this] def run()(implicit runContext: RunContext): Future[Run.Result[A]]
 
-    lazy val dryRunResults: Future[DryRunResults[A]] = dryRun()
-    lazy val runResults: Future[RunResults[A]] = run()
+    lazy val dryRunResults: Future[DryRun.Result[A]] = dryRun()
+    lazy val runResults: Future[Run.Result[A]] = run()
   }
 
   def mapInput[A, B](fn: A => B) = new OpenMandate[A, B] {
@@ -238,19 +199,23 @@ object OutputsTest {
     protected[this] def dryRunLogic(in: MI)(implicit runContext: RunContext): Option[MO]
     protected[this] def runLogic(in: MI)(implicit runContext: RunContext): MO
 
-    override protected[this] def dryRun()(implicit runContext: RunContext) =
+    override protected[this] def dryRun()(implicit runContext: RunContext) = {
+      import DryRun._
       upstream.dryRunResults map { drr =>
         drr flatMap { i =>
           dryRunLogic(i).map(Unneeded.apply).getOrElse(Needed)
         }
       }
+    }
 
-    override protected[this] def run()(implicit runContext: RunContext) =
+    override protected[this] def run()(implicit runContext: RunContext) = {
+      import Run._
       upstream.runResults map { rr =>
         rr flatMap { i =>
           Done(runLogic(i))
         }
       }
+    }
   }
 
   class GenericOpenMandate[I, O](name: String,
