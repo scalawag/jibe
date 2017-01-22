@@ -2,7 +2,7 @@ package org.scalawag.jibe.outputs
 
 trait OpenMandate[IN, OUT] { me =>
   /** Binds this open mandate to a given input, producing a mandate which is ready to be executed. */
-  def bind(in: MandateInput[IN])(implicit runContext: RunContext): Mandate[OUT]
+  def bind(in: MandateInput[IN])(implicit runContext: RunContext): MandateInput[OUT]
 
   /** Creates a new OpenMandate that binds the output of this one to the specified one. */
   def flatMap[YOUT](you: OpenMandate[OUT, YOUT]) =

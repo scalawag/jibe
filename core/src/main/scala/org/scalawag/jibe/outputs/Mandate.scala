@@ -6,7 +6,7 @@ import scala.concurrent.Future
 // the input will change.  If a mandate allows multiple calls (with different arguments), then its output can't be
 // cached as the canonical output of that mandate.
 
-abstract class Mandate[A](implicit runContext: RunContext) extends MandateInput[A] { me =>
+abstract class Mandate[+A](implicit val runContext: RunContext) extends MandateInput[A] { me =>
   import runContext.executionContext
 
   protected[this] def dryRun()(implicit runContext: RunContext): Future[DryRun.Result[A]]
@@ -20,4 +20,12 @@ abstract class Mandate[A](implicit runContext: RunContext) extends MandateInput[
       case DryRun.Unneeded(x) => Future.successful(Run.Unneeded(x))
       case DryRun.Blocked => Future.successful(Run.Blocked)
     }
+
+}
+
+class CompositeMandate[+A](val description: String, in: MandateInput[A])(implicit val runContext: RunContext) extends MandateInput[A] {
+  override val inputs: Set[MandateInput[_]] = Set(in)
+  override def dryRunResult = in.dryRunResult
+  override def runResult = in.runResult
+  override val toString = description
 }

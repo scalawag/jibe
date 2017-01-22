@@ -14,6 +14,10 @@ object MandateLibrary {
 
     override def bind(in: MandateInput[WriteRemoteFile.Input])(implicit runContext: RunContext) =
       new SimpleLogicMandate[WriteRemoteFile.Input, Unit](in) {
+
+        override val inputs: Set[MandateInput[_]] = Set(in)
+        override val toString: String = s"WriteRemoteFile($in)"
+
         override protected[this] def dryRunLogic(in: WriteRemoteFile.Input)(implicit runContext: RunContext) = {
           import runContext._
           log.debug("WRF: see if file is already present")
@@ -38,6 +42,10 @@ object MandateLibrary {
   class InstallAptKey extends OpenMandate[InstallAptKey.Input, Unit] {
     override def bind(in: MandateInput[InstallAptKey.Input])(implicit runContext: RunContext): Mandate[Unit] =
       new SimpleLogicMandate[InstallAptKey.Input, Unit](in) {
+
+        override val inputs: Set[MandateInput[_]] = Set(in)
+        override val toString: String = s"InstallAptKey($in)"
+
         override protected[this] def dryRunLogic(in: InstallAptKey.Input)(implicit runContext: RunContext) = {
           import runContext._
           log.debug(s"IAK: see if apt key ${in.fingerprint} is already installed")
@@ -62,7 +70,12 @@ object MandateLibrary {
   class UpdateAptGet extends OpenMandate[UpdateAptGet.Input, Unit] {
 
     override def bind(in: MandateInput[UpdateAptGet.Input])(implicit runContext: RunContext) =
+
       new SimpleLogicMandate[UpdateAptGet.Input, Unit](in) {
+
+        override val inputs: Set[MandateInput[_]] = Set(in)
+        override val toString: String = s"UpdateAptGet($in)"
+
         override protected[this] def dryRunLogic(in: UpdateAptGet.Input)(implicit runContext: RunContext) = {
           import runContext._
           log.debug(s"UAG: see if apt-get update has been run within the last ${in.refreshInterval}")
@@ -89,6 +102,10 @@ object MandateLibrary {
 
     override def bind(in: MandateInput[InstallPackage.Input])(implicit runContext: RunContext) =
       new SimpleLogicMandate[InstallPackage.Input, InstallPackage.Output](in) {
+
+        override val inputs: Set[MandateInput[_]] = Set(in)
+        override val toString: String = s"InstallPackage($in)"
+
         override protected[this] def dryRunLogic(in: InstallPackage.Input)(implicit runContext: RunContext) = {
           import runContext._
           log.debug(s"IP: see if package $in is installed")
@@ -130,7 +147,7 @@ object MandateLibrary {
         UpdateAptGet.bind(UpdateAptGet.Input(5 seconds)) flatMap
         InstallPackage.bind(InstallPackage.Input("oracle-java8-installer")) map { v =>
         InstallJava8.Output(v.installedVersion)
-      }
+      } compositeAs("Install Java")
     }
   }
 
@@ -144,7 +161,7 @@ object MandateLibrary {
   class InstallSbt extends OpenMandate[InstallSbt.Input, InstallSbt.Output] {
 
     override def bind(in: MandateInput[InstallSbt.Input])(implicit runContext: RunContext) = {
-      val wrf =
+      (
         WriteRemoteFile.bind(
           WriteRemoteFile.Input(
             "/etc/apt/sources.list.d/webupd8team-java-trusty.list",
@@ -152,14 +169,14 @@ object MandateLibrary {
           )
         )
 
-      val iak =
-        InstallAptKey.bind(InstallAptKey.Input("keyserver.ubuntu.com", "7B2C3B5889BF5709A105D03AC2518248EEA14886"))
+        join
 
-      ( wrf join iak ) flatMap
+        InstallAptKey.bind(InstallAptKey.Input("keyserver.ubuntu.com", "7B2C3B5889BF5709A105D03AC2518248EEA14886"))
+      ) flatMap
         UpdateAptGet.bind(UpdateAptGet.Input(5 seconds)) flatMap
         InstallPackage.bind(InstallPackage.Input("sbt", Some("0.13.1"))) map { v =>
-        InstallSbt.Output(v.installedVersion)
-      }
+          InstallSbt.Output(v.installedVersion)
+        } compositeAs("Install sbt")
     }
   }
 
@@ -174,7 +191,7 @@ object MandateLibrary {
     override def bind(in: MandateInput[InstallSoftware.Input])(implicit runContext: RunContext) = {
       val m1 = InstallJava8.bind()
       val m2 = InstallSbt.bind()
-      ( m1 join m2 ) map ( _ => Unit )
+      ( m1 join m2 ) compositeAs("Install Software") map ( _ => Unit )
     }
   }
 }

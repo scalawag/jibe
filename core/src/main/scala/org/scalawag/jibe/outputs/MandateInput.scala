@@ -12,6 +12,8 @@ trait MandateInput[+A] { me =>
   def dryRunResult: Future[DryRun.Result[A]]
   def runResult: Future[Run.Result[A]]
 
+  val inputs: Set[MandateInput[_]] = Set.empty // TODO: statically type
+
   /** Produces a new MandateInput which returns the same dry-run and run results as this mandate with the output
     * (if present) transformed using the provided function. For results that have no output, the function is not used.
     */
@@ -19,6 +21,9 @@ trait MandateInput[+A] { me =>
   def map[B](fn: A => B)(implicit runContext: RunContext): Mandate[B] =
     new Mandate[B] {
       import runContext.executionContext
+
+      override val inputs: Set[MandateInput[_]] = Set(me)
+      override val toString: String = s"map fn"
 
       override protected[this] def dryRun()(implicit runContext: RunContext) =
         me.dryRunResult map { drr =>
@@ -61,6 +66,9 @@ trait MandateInput[+A] { me =>
     new Mandate[B] {
       import runContext.executionContext
 
+      override val inputs: Set[MandateInput[_]] = Set(me, you)
+      override val toString: String = s"flatMap"
+
       override protected[this] def dryRun()(implicit runContext: RunContext) = {
         // TODO: Validate everything I say here with respect to desired behavior.
         // Since the output of the first (me) is not needed for the input of the second (you), we can go ahead and
@@ -94,7 +102,7 @@ trait MandateInput[+A] { me =>
     * provided mandate's result is not calculated.
     */
 
-  def flatMap[C >: A, B](you: OpenMandate[C, B])(implicit runContext: RunContext): Mandate[B] = you.bind(me)
+  def flatMap[C >: A, B](you: OpenMandate[C, B])(implicit runContext: RunContext): MandateInput[B] = you.bind(me)
 
   /** Produces a new MandateInput which calculates the results of this input and the provided input in parallel and
     * then returns the results of both combined in a tuple.  If either input returns an incomplete result (Blocked
@@ -105,6 +113,9 @@ trait MandateInput[+A] { me =>
   def join[C >: A, B](you: MandateInput[B])(implicit runContext: RunContext): Mandate[(C,B)] =
     new Mandate[(C, B)] {
       import runContext.executionContext
+
+      override val inputs: Set[MandateInput[_]] = Set(me, you)
+      override val toString: String = s"join"
 
       override def dryRun()(implicit runContext: RunContext): Future[DryRun.Result[(A, B)]] = {
         import DryRun._
@@ -149,10 +160,13 @@ trait MandateInput[+A] { me =>
       }
     }
 
+  def compositeAs(description: String)(implicit runContext: RunContext) = new CompositeMandate[A](description, me)
 }
 
 object MandateInput {
   implicit def fromLiteral[A](a: A): MandateInput[A] = new MandateInput[A] {
+    override val toString: String = a.toString
+    override val inputs: Set[MandateInput[_]] = Set.empty
     override val dryRunResult = Future.successful(DryRun.Unneeded(a))
     override val runResult = Future.successful(Run.Unneeded(a))
   }
