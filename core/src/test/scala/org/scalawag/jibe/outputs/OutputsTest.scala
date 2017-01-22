@@ -5,7 +5,7 @@ import org.scalatest.FunSpec
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
-class OutputsTest extends FunSpec {
+object OutputsTest extends FunSpec {
   // TODO: handle reporting/structure/metadata
   // TODO: make the implementation interface prettier
 

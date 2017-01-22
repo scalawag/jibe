@@ -55,17 +55,19 @@ trait MandateInput[+A] { me =>
     * that result is used as the result of the new input and the provided mandate's result is not calculated.
     */
 
+  // TODO: flatMap may be the wrong name for this since it doesn't pass the output of the first to the second.
+
   def flatMap[B](you: MandateInput[B])(implicit runContext: RunContext): Mandate[B] =
     new Mandate[B] {
       import runContext.executionContext
 
       override protected[this] def dryRun()(implicit runContext: RunContext) = {
-        import DryRun._
-        me.dryRunResult flatMap {
-          case Unneeded(r) => you.dryRunResult
-          case Needed => Future.successful(Needed)
-          case Blocked => Future.successful(Blocked)
-        }
+        // TODO: Validate everything I say here with respect to desired behavior.
+        // Since the output of the first (me) is not needed for the input of the second (you), we can go ahead and
+        // run these in any order.  We want to perform a dry-run on each even if the first one fails or is blocked,
+        // since there's no actual dependency.
+        me.dryRunResult
+        you.dryRunResult
       }
 
       override protected[this] def run()(implicit runContext: RunContext) = {
@@ -80,6 +82,8 @@ trait MandateInput[+A] { me =>
               case Blocked => Blocked
             }
           case Blocked => Future.successful(Blocked)
+        } recover {
+          case _ => Blocked
         }
       }
     }
@@ -106,13 +110,13 @@ trait MandateInput[+A] { me =>
         import DryRun._
 
         // These need to be done outside of the callback structure below to ensure they happen in parallel.
-        val lf = me.dryRunResult
-        val rf = you.dryRunResult
+        val mf = me.dryRunResult
+        val yf = you.dryRunResult
 
-        lf flatMap { lr =>
-          rf map { rr =>
-            (lr, rr) match {
-              case (Unneeded(lo), Unneeded(ro)) => Unneeded(lo, ro)
+        mf flatMap { mr =>
+          yf map { yr =>
+            (mr, yr) match {
+              case (Unneeded(mo), Unneeded(yo)) => Unneeded(mo, yo)
               case (Blocked, _) => Blocked
               case (_, Blocked) => Blocked
               case (Needed, _) => Needed
@@ -127,13 +131,13 @@ trait MandateInput[+A] { me =>
       override def run()(implicit runContext: RunContext) = {
         import Run._
         // These need to be done outside of the callback structure below to ensure they happen in parallel.
-        val lf = me.runResult
-        val rf = you.runResult
+        val mf = me.runResult
+        val yf = you.runResult
 
-        lf flatMap { lr =>
-          rf map { rr =>
-            (lr, rr) match {
-              case (Unneeded(lo), Unneeded(ro)) => Unneeded(lo, ro)
+        mf flatMap { mr =>
+          yf map { yr =>
+            (mr, yr) match {
+              case (Unneeded(mo), Unneeded(yo)) => Unneeded(mo, yo)
               case (lc: Completed[C], rc: Completed[B]) => Done(lc.output, rc.output)
               case (Blocked, _) => Blocked
               case (_, Blocked) => Blocked

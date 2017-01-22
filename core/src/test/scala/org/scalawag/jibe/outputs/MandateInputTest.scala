@@ -70,7 +70,6 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
     testDryRunResultCombination(ua, bl, bl)
     testDryRunResultCombination(ua, ne, ne)
     testDryRunResultCombination(ua, ub, uj)
-
   }
 
   describe("join run combinations") {
@@ -81,7 +80,8 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
         class TestMandateInput(r: Try[Run.Result[A]]) extends MandateInput[A] {
           var callCount = 0
 
-          override def dryRunResult = ???
+          override def dryRunResult = Future.successful(DryRun.Needed)
+
           override def runResult = {
             callCount += 1
             r match {
@@ -134,10 +134,9 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
     testRunResultCombination(ua, bl, bl)
     testRunResultCombination(ua, db, dj)
     testRunResultCombination(ua, ub, uj)
-
   }
 
-  describe("join timing") {
+  describe("join concurrency") {
 
     it("should calculate the two dry-run results in parallel") {
       val om = new GenericOpenMandate[Unit, String]({ _ => None }, { _ => "a" }, 1 second, 1 second)
@@ -161,7 +160,7 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
     }
 
     it("should calculate the two run results in parallel") {
-      val om = new GenericOpenMandate[Unit, String]({ _ => None }, { _ => "a" }, 1 second, 1 second)
+      val om = new GenericOpenMandate[Unit, String]({ _ => None }, { _ => "a" }, 500 millis, 1 second)
       val a = om.bind(())
       val b = om.bind(())
       val m = a join b
@@ -169,16 +168,182 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
 
       o shouldBe Run.Done(("a", "a"))
 
+      a.dryRunStart should be < a.dryRunFinish
+      a.dryRunFinish should be <= a.runStart
+
+      b.dryRunStart should be < b.dryRunFinish
+      b.dryRunFinish should be <= b.runStart
+
       a.runStart should be < a.runFinish
       b.runStart should be < b.runFinish
 
       a.runStart should be <= b.runFinish
       b.runStart should be <= a.runFinish
+    }
 
-      a.dryRunStart shouldBe None
-      b.dryRunStart shouldBe None
-      a.dryRunFinish shouldBe None
-      b.dryRunFinish shouldBe None
+  }
+
+  describe("flatMap dry-run combinations") {
+
+    def testDryRunResultCombination[A](ar: Try[DryRun.Result[A]], br: Try[DryRun.Result[A]], jr: Try[DryRun.Result[A]]) =
+      it(s"should return $jr if the inputs are $ar and $br") {
+
+        class TestMandateInput(r: Try[DryRun.Result[A]]) extends MandateInput[A] {
+          var callCount = 0
+
+          override def dryRunResult = {
+            callCount += 1
+            r match {
+              case Success(x) => Future.successful(x)
+              case Failure(x) => Future.failed(x)
+            }
+          }
+
+          override def runResult = ???
+        }
+
+        val a = new TestMandateInput(ar)
+        val b = new TestMandateInput(br)
+        val m = a flatMap b
+
+        Await.ready(m.dryRunResult, Duration.Inf)
+        val o = m.dryRunResult.value.get
+
+        o shouldBe jr
+
+        a.callCount shouldBe 1
+        b.callCount shouldBe 1
+      }
+
+    val fa = Failure(new RuntimeException("a"))
+    val fb = Failure(new RuntimeException("b"))
+    val bl = Success(DryRun.Blocked)
+    val ne = Success(DryRun.Needed)
+    val ua = Success(DryRun.Unneeded("a"))
+    val ub = Success(DryRun.Unneeded("b"))
+
+    testDryRunResultCombination(fa, fb, fb)
+    testDryRunResultCombination(fa, bl, bl)
+    testDryRunResultCombination(fa, ne, ne)
+    testDryRunResultCombination(fa, ub, ub)
+
+    testDryRunResultCombination(bl, fb, fb)
+    testDryRunResultCombination(bl, bl, bl)
+    testDryRunResultCombination(bl, ne, ne)
+    testDryRunResultCombination(bl, ub, ub)
+
+    testDryRunResultCombination(ne, fb, fb)
+    testDryRunResultCombination(ne, bl, bl)
+    testDryRunResultCombination(ne, ne, ne)
+    testDryRunResultCombination(ne, ub, ub)
+
+    testDryRunResultCombination(ua, fb, fb)
+    testDryRunResultCombination(ua, bl, bl)
+    testDryRunResultCombination(ua, ne, ne)
+    testDryRunResultCombination(ua, ub, ub)
+  }
+
+  describe("flatMap run combinations") {
+
+    def testRunResultCombination[A](ar: Try[Run.Result[A]], br: Try[Run.Result[A]], jr: Try[Run.Result[A]], bCallCount: Int) =
+      it(s"should return $jr if the inputs are $ar and $br") {
+
+        class TestMandateInput(r: Try[Run.Result[A]]) extends MandateInput[A] {
+          var callCount = 0
+
+          override def dryRunResult = Future.successful(DryRun.Needed)
+
+          override def runResult =  {
+            callCount += 1
+            r match {
+              case Success(x) => Future.successful(x)
+              case Failure(x) => Future.failed(x)
+            }
+          }
+        }
+
+        val a = new TestMandateInput(ar)
+        val b = new TestMandateInput(br)
+        val m = a flatMap b
+
+        Await.ready(m.runResult, Duration.Inf)
+        val o = m.runResult.value.get
+
+        o shouldBe jr
+
+        a.callCount shouldBe 1
+        b.callCount shouldBe bCallCount
+      }
+
+    val fa = Failure(new RuntimeException("a"))
+    val fb = Failure(new RuntimeException("b"))
+    val bl = Success(Run.Blocked)
+    val da = Success(Run.Done("a"))
+    val db = Success(Run.Done("b"))
+    val ua = Success(Run.Unneeded("a"))
+    val ub = Success(Run.Unneeded("b"))
+
+    testRunResultCombination(fa, fb, bl, 0)
+    testRunResultCombination(fa, bl, bl, 0)
+    testRunResultCombination(fa, db, bl, 0)
+    testRunResultCombination(fa, ub, bl, 0)
+
+    testRunResultCombination(bl, fb, bl, 0)
+    testRunResultCombination(bl, bl, bl, 0)
+    testRunResultCombination(bl, db, bl, 0)
+    testRunResultCombination(bl, ub, bl, 0)
+
+    testRunResultCombination(da, fb, bl, 1)
+    testRunResultCombination(da, bl, bl, 1)
+    testRunResultCombination(da, db, db, 1)
+    testRunResultCombination(da, ub, db, 1)
+
+    testRunResultCombination(ua, fb, bl, 1)
+    testRunResultCombination(ua, bl, bl, 1)
+    testRunResultCombination(ua, db, db, 1)
+    testRunResultCombination(ua, ub, ub, 1)
+  }
+
+  describe("flatMap concurrency") {
+
+    it("should calculate the two dry-run results in parallel") {
+      val om = new GenericOpenMandate[Unit, String]({ _ => Some("a") }, { _ => "a" }, 1 second, 1 second)
+      val a = om.bind(())
+      val b = om.bind(())
+      val m = a flatMap b
+      val o = Await.result(m.dryRunResult, Duration.Inf)
+
+      o shouldBe DryRun.Unneeded("a")
+
+      a.dryRunStart should be < a.dryRunFinish
+      b.dryRunStart should be < b.dryRunFinish
+
+      a.dryRunStart should be <= b.dryRunFinish
+      b.dryRunStart should be <= a.dryRunFinish
+
+      a.runStart shouldBe None
+      b.runStart shouldBe None
+      a.runFinish shouldBe None
+      b.runFinish shouldBe None
+    }
+
+    it("should calculate the two run results in series") {
+      val om = new GenericOpenMandate[Unit, String]({ _ => None }, { _ => "a" }, 1 second, 1 second)
+      val a = om.bind(())
+      val b = om.bind(())
+      val m = a flatMap b
+      val o = Await.result(m.runResult, Duration.Inf)
+
+      o shouldBe Run.Done("a")
+
+      a.dryRunStart should be < a.dryRunFinish
+      b.dryRunStart should be < b.dryRunFinish
+      a.runStart should be < a.runFinish
+      b.runStart should be < b.runFinish
+
+      a.dryRunFinish should be <= a.runStart
+      b.dryRunFinish should be <= a.runStart
+      a.runFinish should be <= b.runStart
     }
 
   }
