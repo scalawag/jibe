@@ -4,6 +4,7 @@ import java.io.{File, PrintWriter}
 
 import org.scalatest.FunSpec
 import org.scalawag.jibe.FileUtils
+import org.scalawag.jibe.outputs.MandateLibrary.InstallSoftware
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -48,82 +49,13 @@ object OutputsTest extends FunSpec {
   }
 */
 
-  def graph(mi: MandateInput[_], pw: PrintWriter): Unit = {
-      pw.println("digraph RunnableGraph {")
-      pw.println("  rankdir=LR")
-
-      var vertices: Set[Int] = Set.empty
-
-      def id(mi: MandateInput[_]) = System.identityHashCode(mi)
-
-      def addToGraph(mi: MandateInput[_]): Unit = mi match {
-        case cm: CompositeMandate[_] =>
-          if ( ! vertices.contains(id(mi)) ) {
-            val attrs = Map("shape" -> "cds", "label" -> cm.toString)
-            val attrString = attrs.map { case (k, v) =>
-              s"""${k}="${v}""""
-            }.mkString("[",",","]")
-
-            pw.println(s""""${id(mi)}"$attrString""")
-
-            mi.inputs foreach addToGraph
-
-            mi.inputs foreach { from =>
-              pw.println(s""""${id(from)}" -> "${id(mi)}"""")
-            }
-          }
-
-        case m: Mandate[_] =>
-          if ( ! vertices.contains(id(mi)) ) {
-            val attrs = Map("shape" -> "box", "label" -> m.toString)
-            val attrString = attrs.map { case (k, v) =>
-              s"""${k}="${v}""""
-            }.mkString("[",",","]")
-
-            pw.println(s""""${id(mi)}"$attrString""")
-
-            mi.inputs foreach addToGraph
-
-            mi.inputs foreach {
-              case from: CompositeMandate[_] =>
-                pw.println(s""""${id(from)}" -> "${id(mi)}"""")
-              case from: Mandate[_] =>
-                pw.println(s""""${id(from)}" -> "${id(mi)}"""")
-              case _ =>
-            }
-          }
-
-        case _ => None
-      }
-
-    addToGraph(mi)
-    pw.println("}")
-  }
-
   def main(args: Array[String]): Unit = {
     implicit val rc = new RunContext
 
-    def dumpInputs(mi: MandateInput[_], depth: Int = 0): Unit = mi match {
-      case m: Mandate[_] =>
-        println(" " * depth + m)
-        m.inputs foreach { i =>
-          dumpInputs(i, depth + 2)
-        }
-      case m: CompositeMandate[_] =>
-        println(" " * depth + m)
-        m.inputs foreach { i =>
-          dumpInputs(i, depth + 2)
-        }
-      case _ =>
-        mi.inputs foreach { i =>
-          dumpInputs(i, depth)
-        }
-    }
+    val j = MandateLibrary.InstallSoftwareSharedAptGetUpdate.bind(InstallSoftware.Input())
 
-    val j = MandateLibrary.InstallSoftware.bind()
-
-    dumpInputs(j)
-    FileUtils.writeFileWithPrintWriter(new File("graph.dot"))(graph(j, _))
+    j.dump(new PrintWriter(System.out))
+    FileUtils.writeFileWithPrintWriter(new File("graph.dot"))(j.graph)
 
     println(Await.result(j.dryRunResult, Duration.Inf))
     println(Await.result(j.runResult, Duration.Inf))

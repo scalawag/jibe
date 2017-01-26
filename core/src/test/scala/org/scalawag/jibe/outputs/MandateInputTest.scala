@@ -139,46 +139,46 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
   describe("join concurrency") {
 
     it("should calculate the two dry-run results in parallel") {
-      val om = new GenericOpenMandate[Unit, String]({ _ => None }, { _ => "a" }, 1 second, 1 second)
-      val a = om.bind(())
-      val b = om.bind(())
-      val m = a join b
+      val oa = new GenericOpenMandate[Unit, String]({ _ => None }, { _ => "a" }, 1 second, 1 second)
+      val ob = new GenericOpenMandate[Unit, String]({ _ => None }, { _ => "a" }, 1 second, 1 second)
+      val om = oa map { _ => () } flatMap ob
+      val m = om.bind(())
       val o = Await.result(m.dryRunResult, Duration.Inf)
 
       o shouldBe DryRun.Needed
 
-      a.dryRunStart should be < a.dryRunFinish
-      b.dryRunStart should be < b.dryRunFinish
+      oa.dryRunStart should be < oa.dryRunFinish
+      ob.dryRunStart should be < ob.dryRunFinish
 
-      a.dryRunStart should be <= b.dryRunFinish
-      b.dryRunStart should be <= a.dryRunFinish
+      oa.dryRunStart should be <= ob.dryRunFinish
+      ob.dryRunStart should be <= oa.dryRunFinish
 
-      a.runStart shouldBe None
-      b.runStart shouldBe None
-      a.runFinish shouldBe None
-      b.runFinish shouldBe None
+      oa.runStart shouldBe None
+      ob.runStart shouldBe None
+      oa.runFinish shouldBe None
+      ob.runFinish shouldBe None
     }
 
     it("should calculate the two run results in parallel") {
-      val om = new GenericOpenMandate[Unit, String]({ _ => None }, { _ => "a" }, 500 millis, 1 second)
-      val a = om.bind(())
-      val b = om.bind(())
-      val m = a join b
+      val oa = new GenericOpenMandate[Unit, String]({ _ => None }, { _ => "a" }, 500 millis, 1 second)
+      val ob = new GenericOpenMandate[Unit, String]({ _ => None }, { _ => "a" }, 500 millis, 1 second)
+      val om = oa map { _ => () } flatMap ob
+      val m = om.bind(())
       val o = Await.result(m.runResult, Duration.Inf)
 
       o shouldBe Run.Done(("a", "a"))
 
-      a.dryRunStart should be < a.dryRunFinish
-      a.dryRunFinish should be <= a.runStart
+      oa.dryRunStart should be < oa.dryRunFinish
+      oa.dryRunFinish should be <= oa.runStart
 
-      b.dryRunStart should be < b.dryRunFinish
-      b.dryRunFinish should be <= b.runStart
+      ob.dryRunStart should be < ob.dryRunFinish
+      ob.dryRunFinish should be <= ob.runStart
 
-      a.runStart should be < a.runFinish
-      b.runStart should be < b.runFinish
+      oa.runStart should be < oa.runFinish
+      ob.runStart should be < ob.runFinish
 
-      a.runStart should be <= b.runFinish
-      b.runStart should be <= a.runFinish
+      oa.runStart should be <= ob.runFinish
+      ob.runStart should be <= oa.runFinish
     }
 
   }
@@ -188,32 +188,39 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
     def testDryRunResultCombination[A](ar: Try[DryRun.Result[A]], br: Try[DryRun.Result[A]], jr: Try[DryRun.Result[A]]) =
       it(s"should return $jr if the inputs are $ar and $br") {
 
-        class TestMandateInput(r: Try[DryRun.Result[A]]) extends MandateInput[A] {
+        class TestOpenMandate(r: Try[DryRun.Result[A]]) extends OpenMandate[Unit, A] {
           var callCount = 0
 
-          override def dryRunResult = {
-            callCount += 1
-            r match {
-              case Success(x) => Future.successful(x)
-              case Failure(x) => Future.failed(x)
+          class TestMandate(r: Try[DryRun.Result[A]]) extends MandateInput[A] {
+            override def dryRunResult = {
+              callCount += 1
+              r match {
+                case Success(x) => Future.successful(x)
+                case Failure(x) => Future.failed(x)
+              }
             }
+
+            override def runResult = ???
           }
 
-          override def runResult = ???
+          override def bind(in: MandateInput[Unit])(implicit runContext: RunContext) = new TestMandate(r)
         }
 
-        val a = new TestMandateInput(ar)
-        val b = new TestMandateInput(br)
-        val m = a flatMap b
+        val oa = new TestOpenMandate(ar)
+        val ob = new TestOpenMandate(br)
+        val om = oa map { _ => () } flatMap ob
+        val m = om.bind(())
 
         Await.ready(m.dryRunResult, Duration.Inf)
         val o = m.dryRunResult.value.get
 
         o shouldBe jr
 
-        a.callCount shouldBe 1
-        b.callCount shouldBe 1
+        oa.callCount shouldBe 1
+        ob.callCount shouldBe 1
+
       }
+
 
     val fa = Failure(new RuntimeException("a"))
     val fb = Failure(new RuntimeException("b"))
@@ -248,31 +255,37 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
     def testRunResultCombination[A](ar: Try[Run.Result[A]], br: Try[Run.Result[A]], jr: Try[Run.Result[A]], bCallCount: Int) =
       it(s"should return $jr if the inputs are $ar and $br") {
 
-        class TestMandateInput(r: Try[Run.Result[A]]) extends MandateInput[A] {
+        class TestOpenMandate(r: Try[Run.Result[A]]) extends OpenMandate[Unit, A] {
           var callCount = 0
 
-          override def dryRunResult = Future.successful(DryRun.Needed)
+          class TestMandateInput(r: Try[Run.Result[A]]) extends MandateInput[A] {
 
-          override def runResult =  {
-            callCount += 1
-            r match {
-              case Success(x) => Future.successful(x)
-              case Failure(x) => Future.failed(x)
+            override def dryRunResult = Future.successful(DryRun.Needed)
+
+            override def runResult =  {
+              callCount += 1
+              r match {
+                case Success(x) => Future.successful(x)
+                case Failure(x) => Future.failed(x)
+              }
             }
           }
+
+          override def bind(in: MandateInput[Unit])(implicit runContext: RunContext) = new TestMandateInput(r)
         }
 
-        val a = new TestMandateInput(ar)
-        val b = new TestMandateInput(br)
-        val m = a flatMap b
+        val oa = new TestOpenMandate(ar)
+        val ob = new TestOpenMandate(br)
+        val om = oa map { _ => () } flatMap ob
+        val m = om.bind(())
 
         Await.ready(m.runResult, Duration.Inf)
         val o = m.runResult.value.get
 
         o shouldBe jr
 
-        a.callCount shouldBe 1
-        b.callCount shouldBe bCallCount
+        oa.callCount shouldBe 1
+        ob.callCount shouldBe bCallCount
       }
 
     val fa = Failure(new RuntimeException("a"))
@@ -307,43 +320,43 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
   describe("flatMap concurrency") {
 
     it("should calculate the two dry-run results in parallel") {
-      val om = new GenericOpenMandate[Unit, String]({ _ => Some("a") }, { _ => "a" }, 1 second, 1 second)
-      val a = om.bind(())
-      val b = om.bind(())
-      val m = a flatMap b
+      val oa = new GenericOpenMandate[Unit, String]({ _ => Some("a") }, { _ => "a" }, 1 second, 1 second)
+      val ob = new GenericOpenMandate[Unit, String]({ _ => Some("a") }, { _ => "a" }, 1 second, 1 second)
+      val om = oa map { _ => () } flatMap ob
+      val m = om.bind(())
       val o = Await.result(m.dryRunResult, Duration.Inf)
 
       o shouldBe DryRun.Unneeded("a")
 
-      a.dryRunStart should be < a.dryRunFinish
-      b.dryRunStart should be < b.dryRunFinish
+      oa.dryRunStart should be < oa.dryRunFinish
+      ob.dryRunStart should be < ob.dryRunFinish
 
-      a.dryRunStart should be <= b.dryRunFinish
-      b.dryRunStart should be <= a.dryRunFinish
+      oa.dryRunStart should be <= ob.dryRunFinish
+      ob.dryRunStart should be <= oa.dryRunFinish
 
-      a.runStart shouldBe None
-      b.runStart shouldBe None
-      a.runFinish shouldBe None
-      b.runFinish shouldBe None
+      oa.runStart shouldBe None
+      ob.runStart shouldBe None
+      oa.runFinish shouldBe None
+      ob.runFinish shouldBe None
     }
 
     it("should calculate the two run results in series") {
-      val om = new GenericOpenMandate[Unit, String]({ _ => None }, { _ => "a" }, 1 second, 1 second)
-      val a = om.bind(())
-      val b = om.bind(())
-      val m = a flatMap b
+      val oa = new GenericOpenMandate[Unit, String]({ _ => None }, { _ => "a" }, 1 second, 1 second)
+      val ob = new GenericOpenMandate[Unit, String]({ _ => None }, { _ => "a" }, 1 second, 1 second)
+      val om = oa map { _ => () } flatMap ob
+      val m = om.bind(())
       val o = Await.result(m.runResult, Duration.Inf)
 
       o shouldBe Run.Done("a")
 
-      a.dryRunStart should be < a.dryRunFinish
-      b.dryRunStart should be < b.dryRunFinish
-      a.runStart should be < a.runFinish
-      b.runStart should be < b.runFinish
+      oa.dryRunStart should be < oa.dryRunFinish
+      ob.dryRunStart should be < ob.dryRunFinish
+      oa.runStart should be < oa.runFinish
+      ob.runStart should be < ob.runFinish
 
-      a.dryRunFinish should be <= a.runStart
-      b.dryRunFinish should be <= a.runStart
-      a.runFinish should be <= b.runStart
+      oa.dryRunFinish should be <= oa.runStart
+      ob.dryRunFinish should be <= oa.runStart
+      oa.runFinish should be <= ob.runStart
     }
 
   }
