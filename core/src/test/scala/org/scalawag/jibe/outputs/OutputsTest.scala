@@ -13,15 +13,6 @@ object OutputsTest extends FunSpec {
   // TODO: handle reporting/structure/metadata
   // TODO: make the implementation interface prettier
 
-  def mapInput[A, B](fn: A => B) = new OpenMandate[A, B] {
-    override def bind(in: MandateInput[A])(implicit runContext: RunContext) =
-      new SimpleLogicMandate[A, B](in) {
-        override protected[this] def dryRunLogic(in: A)(implicit runContext: RunContext) = Some(fn(in))
-        override protected[this] def runLogic(in: A)(implicit runContext: RunContext) = fn(in)
-      }
-  }
-
-
   Logging.initialize()
 /*
   it("should run two joined Mandates in parallel") {
@@ -52,9 +43,12 @@ object OutputsTest extends FunSpec {
   def main(args: Array[String]): Unit = {
     implicit val rc = new RunContext
 
-    val j = MandateLibrary.InstallSoftwareSharedAptGetUpdate.bind(InstallSoftware.Input())
+    val j = MandateLibrary.InstallSoftware.Full.bind(UpstreamBoundMandate.fromLiteral(InstallSoftware.Input()))
 
-    j.dump(new PrintWriter(System.out))
+    val pw = new PrintWriter(System.out)
+    j.dump(pw)
+    pw.flush()
+
     FileUtils.writeFileWithPrintWriter(new File("graph.dot"))(j.graph)
 
     println(Await.result(j.dryRunResult, Duration.Inf))

@@ -1,26 +1,33 @@
 package org.scalawag.jibe.outputs
 
-abstract class SimpleLogicMandate[MI, MO](upstream: MandateInput[MI])(implicit runContext: RunContext) extends Mandate[MO] {
-  import runContext.executionContext
+abstract class SimpleLogicMandate[-A, +B] extends Mandate[A, B] {
+  protected[this] def dryRunLogic(in: A)(implicit runContext: RunContext): Option[B]
+  protected[this] def runLogic(in: A)(implicit runContext: RunContext): B
 
-  protected[this] def dryRunLogic(in: MI)(implicit runContext: RunContext): Option[MO]
-  protected[this] def runLogic(in: MI)(implicit runContext: RunContext): MO
+  class SimpleLogicBoundMandate(upstream: UpstreamBoundMandate[A])(implicit runContext: RunContext) extends BoundMandate[B] {
+    import runContext.executionContext
 
-  override protected[this] def dryRun()(implicit runContext: RunContext) = {
-    import DryRun._
-    upstream.dryRunResult map { drr =>
-      drr flatMap { i =>
-        dryRunLogic(i).map(Unneeded.apply).getOrElse(Needed)
+    override val upstreams: Iterable[UpstreamBoundMandate[_]] = Iterable(upstream)
+
+    override protected[this] def dryRun()(implicit runContext: RunContext) = {
+      import DryRun._
+      upstream.dryRunResult map { drr =>
+        drr flatMap { i =>
+          dryRunLogic(i).map(Unneeded.apply).getOrElse(Needed)
+        }
+      }
+    }
+
+    override protected[this] def run()(implicit runContext: RunContext) = {
+      import Run._
+      upstream.runResult map { rr =>
+        rr flatMap { i =>
+          Done(runLogic(i))
+        }
       }
     }
   }
 
-  override protected[this] def run()(implicit runContext: RunContext) = {
-    import Run._
-    upstream.runResult map { rr =>
-      rr flatMap { i =>
-        Done(runLogic(i))
-      }
-    }
-  }
+  override def bind(upstream: UpstreamBoundMandate[A])(implicit runContext: RunContext): UpstreamBoundMandate[B] =
+    new SimpleLogicBoundMandate(upstream)
 }

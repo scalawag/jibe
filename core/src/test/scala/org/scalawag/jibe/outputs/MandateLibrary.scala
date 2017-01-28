@@ -9,86 +9,60 @@ object MandateLibrary {
   object WriteRemoteFile {
     case class Input(path: String, content: String)
 
-    def bind(in: MandateInput[Input])(implicit rc: RunContext): Mandate[Unit] = (new WriteRemoteFile).bind(in)
-  }
+    object Mandate extends SimpleLogicMandate[Input, Unit] {
 
-  class WriteRemoteFile extends OpenMandate[WriteRemoteFile.Input, Unit] {
-
-    override def bind(in: MandateInput[WriteRemoteFile.Input])(implicit runContext: RunContext) =
-      new SimpleLogicMandate[WriteRemoteFile.Input, Unit](in) {
-
-        override val inputs: Set[MandateInput[_]] = Set(in)
-        override val toString: String = s"WriteRemoteFile($in)"
-
-        override protected[this] def dryRunLogic(in: WriteRemoteFile.Input)(implicit runContext: RunContext) = {
-          import runContext._
-          log.debug("WRF: see if file is already present")
-          None
-        }
-
-        override protected[this] def runLogic(in: WriteRemoteFile.Input)(implicit runContext: RunContext) = {
-          import runContext._
-          log.debug("WRF: sending the file")
-          Thread.sleep(3000)
-          log.debug("WRF: file sent")
-        }
+      override protected[this] def dryRunLogic(in: Input)(implicit runContext: RunContext): Option[Unit] =  {
+        import runContext._
+        log.debug("WRF: see if file is already present")
+        None
       }
+
+      override protected[this] def runLogic(in: Input)(implicit runContext: RunContext): Unit = {
+        import runContext._
+        log.debug("WRF: sending the file")
+        Thread.sleep(3000)
+        log.debug("WRF: file sent")
+      }
+
+      override val toString: String = s"WriteRemoteFile"
+    }
   }
 
   object InstallAptKey {
     case class Input(keyserver: String, fingerprint: String)
 
-    def bind(in: MandateInput[Input])(implicit rc: RunContext) = (new InstallAptKey).bind(in)
-  }
-
-  class InstallAptKey extends OpenMandate[InstallAptKey.Input, Unit] {
-    override def bind(in: MandateInput[InstallAptKey.Input])(implicit runContext: RunContext): Mandate[Unit] =
-      new SimpleLogicMandate[InstallAptKey.Input, Unit](in) {
-
-        override val inputs: Set[MandateInput[_]] = Set(in)
-        override val toString: String = s"InstallAptKey($in)"
-
-        override protected[this] def dryRunLogic(in: InstallAptKey.Input)(implicit runContext: RunContext) = {
-          import runContext._
-          log.debug(s"IAK: see if apt key ${in.fingerprint} is already installed")
-          None
-        }
-
-        override protected[this] def runLogic(in: InstallAptKey.Input)(implicit runContext: RunContext) = {
-          import runContext._
-          log.debug(s"IAK: install the apt key ${in.fingerprint}")
-          Thread.sleep(3000)
-          log.debug("IAK: installed key")
-        }
+    object Mandate extends SimpleLogicMandate[InstallAptKey.Input, Unit] {
+      override protected[this] def dryRunLogic(in: InstallAptKey.Input)(implicit runContext: RunContext) = {
+        import runContext._
+        log.debug(s"IAK: see if apt key ${in.fingerprint} is already installed")
+        None
       }
+
+      override protected[this] def runLogic(in: InstallAptKey.Input)(implicit runContext: RunContext) = {
+        import runContext._
+        log.debug(s"IAK: install the apt key ${in.fingerprint}")
+        Thread.sleep(3000)
+        log.debug("IAK: installed key")
+      }
+    }
   }
 
   object UpdateAptGet {
     case class Input(refreshInterval: Duration = 0 seconds)
 
-    object OpenMandate extends org.scalawag.jibe.outputs.OpenMandate[Input, Unit] {
+    object Mandate extends SimpleLogicMandate[Input, Unit] {
+      override protected[this] def dryRunLogic(in: Input)(implicit runContext: RunContext) = {
+        import runContext._
+        log.debug(s"UAG: see if apt-get update has been run within the last ${in.refreshInterval}")
+        None
+      }
 
-      override def bind(in: MandateInput[Input])(implicit runContext: RunContext) =
-
-        new SimpleLogicMandate[Input, Unit](in) {
-
-          override val inputs: Set[MandateInput[_]] = Set(in)
-          override val toString: String = s"UpdateAptGet($in)"
-
-          override protected[this] def dryRunLogic(in: Input)(implicit runContext: RunContext) = {
-            import runContext._
-            log.debug(s"UAG: see if apt-get update has been run within the last ${in.refreshInterval}")
-            None
-          }
-
-          override protected[this] def runLogic(in: Input)(implicit runContext: RunContext) = {
-            import runContext._
-            log.debug(s"UAG: run apt-get update")
-            Thread.sleep(3000)
-            log.debug("UAG: ran apt-get update")
-          }
-        }
-
+      override protected[this] def runLogic(in: Input)(implicit runContext: RunContext) = {
+        import runContext._
+        log.debug(s"UAG: run apt-get update")
+        Thread.sleep(3000)
+        log.debug("UAG: ran apt-get update")
+      }
     }
   }
 
@@ -96,29 +70,20 @@ object MandateLibrary {
     case class Input(name: String, version: Option[String] = None)
     case class Output(installedVersion: String)
 
-    object OpenMandate extends org.scalawag.jibe.outputs.OpenMandate[Input, Output] {
+    object Mandate extends SimpleLogicMandate[Input, Output] {
+      override protected[this] def dryRunLogic(in: Input)(implicit runContext: RunContext) = {
+        import runContext._
+        log.debug(s"IP: see if package $in is installed")
+        None
+      }
 
-      override def bind(in: MandateInput[Input])(implicit runContext: RunContext) =
-        new SimpleLogicMandate[Input, Output](in) {
-
-          override val inputs: Set[MandateInput[_]] = Set(in)
-          override val toString: String = s"InstallPackage($in)"
-
-          override protected[this] def dryRunLogic(in: Input)(implicit runContext: RunContext) = {
-            import runContext._
-            log.debug(s"IP: see if package $in is installed")
-            None
-          }
-
-          override protected[this] def runLogic(in: Input)(implicit runContext: RunContext) = {
-            import runContext._
-            log.debug(s"IP: install package $in")
-            Thread.sleep(3000)
-            log.debug(s"IP: installed package $in")
-            Output(in.version.getOrElse("1.0.0"))
-          }
-        }
-
+      override protected[this] def runLogic(in: Input)(implicit runContext: RunContext) = {
+        import runContext._
+        log.debug(s"IP: install package $in")
+        Thread.sleep(3000)
+        log.debug(s"IP: installed package $in")
+        Output(in.version.getOrElse("1.0.0"))
+      }
     }
   }
 
@@ -126,38 +91,47 @@ object MandateLibrary {
     case class Input(version: Option[String] = None)
     case class Output(version: String)
 
+    val PreAptGetUpdate = {
+      val in = Mandate[Input]
 
-    object Complete extends org.scalawag.jibe.outputs.OpenMandate[Input, Output] {
-      override def bind(in: MandateInput[Input])(implicit runContext: RunContext) =
-        PreAptGetUpdate.bind(in).
-          map(_ => UpdateAptGet.Input()).
-          flatMap(UpdateAptGet.OpenMandate).
-          flatMap(_ => in).
-          flatMap(PostAptGetUpdate)
-    }
-
-    object PreAptGetUpdate extends org.scalawag.jibe.outputs.OpenMandate[Input, Unit] {
-      override def bind(in: MandateInput[Input])(implicit runContext: RunContext): MandateInput[Unit] = {
-        val wrf =
-          WriteRemoteFile.bind(
-            WriteRemoteFile.Input(
-              "/etc/apt/sources.list.d/webupd8team-java-trusty.list",
-              "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main"
-            )
+      val wrf =
+        in map { _ =>
+          WriteRemoteFile.Input(
+            "/etc/apt/sources.list.d/webupd8team-java-trusty.list",
+            "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main"
           )
+        } flatMap WriteRemoteFile.Mandate
 
-        val iak = InstallAptKey.bind(InstallAptKey.Input("keyserver.ubuntu.com", "7B2C3B5889BF5709A105D03AC2518248EEA14886"))
+      val iak =
+        in map { _ =>
+          InstallAptKey.Input("keyserver.ubuntu.com", "7B2C3B5889BF5709A105D03AC2518248EEA14886")
+        } flatMap InstallAptKey.Mandate
 
-        ( wrf join iak ) map ( _ => () )
-      }
+      ( wrf join iak ) map ( _ => () )
     }
 
-    object PostAptGetUpdate extends org.scalawag.jibe.outputs.OpenMandate[Input, Output] {
-      /** Binds this open mandate to a given input, producing a mandate which is ready to be executed. */
-      override def bind(in: MandateInput[Input])(implicit runContext: RunContext): MandateInput[Output] = {
-        in.map(_ => InstallPackage.Input("oracle-java8-installer")).flatMap(InstallPackage.OpenMandate).map { v =>
-          Output(v.installedVersion)
-        } compositeAs("Install Java")
+    val PostAptGetUpdate =
+      Mandate[Input] map { _ =>
+        InstallPackage.Input("oracle-java8-installer")
+      } flatMap {
+        InstallPackage.Mandate
+      } map { v =>
+        Output(v.installedVersion)
+      }
+
+    val Complete = {
+      val in = Mandate[Input]
+
+      in map { _ =>
+        UpdateAptGet.Input()
+      } flatMap {
+        UpdateAptGet.Mandate
+      } map { _ =>
+        Input() // This is gross.  It shouldn't need to be here because it's going to be ignored anyway.
+      } flatMap {
+        in
+      } flatMap {
+        PostAptGetUpdate
       }
     }
   }
@@ -166,37 +140,44 @@ object MandateLibrary {
     case class Input(version: Option[String] = None)
     case class Output(version: String)
 
-    object Full extends OpenMandate[Input, Output] {
-      override def bind(in: MandateInput[Input])(implicit runContext: RunContext) =
-        PreAptGetUpdate.bind(in).
-          map(_ => UpdateAptGet.Input()).
-          flatMap(UpdateAptGet.OpenMandate).
-          flatMap(_ => in).
-          flatMap(PostAptGetUpdate)
-    }
-
-    object PreAptGetUpdate extends OpenMandate[Input, Unit] {
-      override def bind(in: MandateInput[Input])(implicit runContext: RunContext): MandateInput[Unit] = {
-        val wrf =
-          WriteRemoteFile.bind(
-            WriteRemoteFile.Input(
-              "/etc/apt/sources.list.d/webupd8team-java-trusty.list",
-              "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main"
-            )
-          )
-
-        val iak = InstallAptKey.bind(InstallAptKey.Input("keyserver.ubuntu.com", "7B2C3B5889BF5709A105D03AC2518248EEA14886"))
-
-        ( wrf join iak ) map ( _ => () )
+    val PreAptGetUpdate =
+      Mandate[Input] map { _ =>
+        WriteRemoteFile.Input(
+          "/etc/apt/sources.list.d/webupd8team-java-trusty.list",
+          "deb http://ppa.launchpad.net/webupd8team/java/ubuntu trusty main"
+        )
+      } flatMap {
+        WriteRemoteFile.Mandate
+      } map { _ =>
+        InstallAptKey.Input("keyserver.ubuntu.com", "7B2C3B5889BF5709A105D03AC2518248EEA14886")
+      } flatMap {
+        InstallAptKey.Mandate
       }
-    }
 
-    object PostAptGetUpdate extends OpenMandate[Input, Output] {
-      /** Binds this open mandate to a given input, producing a mandate which is ready to be executed. */
-      override def bind(in: MandateInput[Input])(implicit runContext: RunContext): MandateInput[Output] = {
-        in.map(_ => InstallPackage.Input("sbt", Some("0.13.1"))).flatMap(InstallPackage.OpenMandate) map { v =>
-          InstallSbt.Output(v.installedVersion)
-        } compositeAs("Install sbt")
+    val PostAptGetUpdate =
+      Mandate[Input] map { _ =>
+        InstallPackage.Input("sbt", Some("0.13.1"))
+      } flatMap {
+        InstallPackage.Mandate
+      } map { v =>
+        InstallSbt.Output(v.installedVersion)
+      }
+
+    val Complete = {
+      val in = Mandate[Input]
+
+      in flatMap {
+        PreAptGetUpdate
+      } map { _ =>
+        UpdateAptGet.Input()
+      } flatMap {
+        UpdateAptGet.Mandate
+      } map { _ =>
+        Input() // This is gross.  It shouldn't need to be here because it's going to be ignored anyway.
+      } flatMap { _ =>
+        in
+      } flatMap {
+        PostAptGetUpdate
       }
     }
   }
@@ -204,35 +185,33 @@ object MandateLibrary {
   object InstallSoftware {
     case class Input(sbtVersion: Option[String] = None, javaVersion: Option[String] = None)
 
-    def bind(in: Input = Input())(implicit runContext: RunContext) = (new InstallSoftware).bind(in)
-  }
+    val Full = {
+      val in = Mandate[Input]
 
-  class InstallSoftware extends OpenMandate[InstallSoftware.Input, Unit] {
-
-    override def bind(in: MandateInput[InstallSoftware.Input])(implicit runContext: RunContext) = {
-      val m1 = InstallJava8.Complete.bind(InstallJava8.Input())
-      val m2 = InstallSbt.Full.bind(InstallSbt.Input())
-      ( m1 join m2 ) compositeAs("Install Software") map ( _ => () )
+      val java = in map { _ => InstallJava8.Input() } flatMap InstallJava8.Complete
+      val sbt = in map { _ => InstallSbt.Input() } flatMap InstallSbt.Complete
+      ( java join sbt ) //compositeAs("Install Software") map ( _ => () )
     }
-  }
 
-  object InstallSoftwareSharedAptGetUpdate extends OpenMandate[InstallSoftware.Input, Unit] {
-    override def bind(in: MandateInput[InstallSoftware.Input])(implicit runContext: RunContext) = {
-      val pre =
+    val Shared = {
+      val in = Mandate[Input]
+
+      val pres =
         (
           ( in map { i => InstallJava8.Input(i.javaVersion) } flatMap InstallJava8.PreAptGetUpdate )
             join
           ( in map { i => InstallSbt.Input(i.sbtVersion) } flatMap InstallSbt.PreAptGetUpdate )
         )
 
-      val mid = pre.map( _ => UpdateAptGet.Input() ).flatMap(UpdateAptGet.OpenMandate).flatMap( _ => in )
+      // TODO: weird map to create an Input just to get the type (which is gross)
+      val mid = pres.map( _ => UpdateAptGet.Input() ).flatMap(UpdateAptGet.Mandate).map(_ => Input()).flatMap( _ => in )
 
       val post =
         (
-          ( mid flatMap { i => InstallJava8.Input(i.javaVersion) } flatMap InstallJava8.PostAptGetUpdate )
+          ( mid map { i => InstallJava8.Input(i.javaVersion) } flatMap InstallJava8.PostAptGetUpdate )
             join
-          ( mid flatMap { i => InstallSbt.Input(i.sbtVersion) } flatMap InstallSbt.PostAptGetUpdate )
-        ) compositeAs("Install Software") map { _ => () }
+          ( mid map { i => InstallSbt.Input(i.sbtVersion) } flatMap InstallSbt.PostAptGetUpdate )
+        ) //compositeAs("Install Software") map { _ => () }
 
       post
     }
