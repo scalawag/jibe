@@ -73,9 +73,49 @@ trait Mandate[-A, +B] { me =>
     }
 
   def flatMap[C](you: Mandate[B, C]): Mandate[A, C] =
-    this.flatMap( _ => you )
+    new Mandate[A, C] {
+      override def bind(in: UpstreamBoundMandate[A])(implicit runContext: RunContext): UpstreamBoundMandate[C] =
+        new BoundMandate[C] {
+          import runContext.executionContext
 
-//  def flatMap[C >: A, B](you: OpenMandate[C, B])(implicit runContext: RunContext): MandateInput[B] = you.bind(me)
+          private[this] val upstream = me.bind(in)
+
+          override val upstreams = Set(upstream)
+
+          override val toString: String = s"flatMap: $you"
+
+          override protected[this] def dryRun()(implicit runContext: RunContext) = {
+            import DryRun._
+            upstream.dryRunResult flatMap {
+              case Unneeded(r) => you.bind(UpstreamBoundMandate(r, this)).dryRunResult
+              case Needed => Future.successful(Needed)
+              case Blocked => Future.successful(Blocked)
+            }
+          }
+
+          override protected[this] def run()(implicit runContext: RunContext) = {
+            import Run._
+            upstream.runResult flatMap {
+              case Unneeded(mr) => you.bind(UpstreamBoundMandate(mr, this)).runResult
+              case Done(mr) =>
+                // We need to return done if this returned Done to indicate that an action was taken.
+                you.bind(UpstreamBoundMandate(mr, this)).runResult map {
+                  case Done(yr) => Done(yr)
+                  case Unneeded(yr) => Done(yr)
+                  case Blocked => Blocked
+                }
+              case Blocked => Future.successful(Blocked)
+            } recover {
+              case _ => Blocked
+            }
+          }
+        }
+    }
+
+  def replace[C <: A, D](you: Mandate[C, D]): Mandate[C, D] =
+    ( this join you ) map (_._2)
+
+  //  def flatMap[C >: A, B](you: OpenMandate[C, B])(implicit runContext: RunContext): MandateInput[B] = you.bind(me)
 
   /** Creates a new OpenMandate that, when bound, will produce two joined mandates (executed in parallel). */
   def join[C <: A, D](you: Mandate[C, D]): Mandate[C, (B, D)] =
@@ -137,7 +177,7 @@ trait Mandate[-A, +B] { me =>
 
   def ignore: Mandate[A, Nothing] = this map { _ => null.asInstanceOf[Nothing] }
 
-  def compositeAs(description: String)(implicit runContext: RunContext) = new CompositeMandate(description, me)
+  def compositeAs(description: String) = new CompositeMandate(description, me)
 }
 
 object Mandate {

@@ -43,7 +43,8 @@ object OutputsTest extends FunSpec {
   def main(args: Array[String]): Unit = {
     implicit val rc = new RunContext
 
-    val j = MandateLibrary.InstallSoftware.Full.bind(UpstreamBoundMandate.fromLiteral(InstallSoftware.Input()))
+    val b = MandateLibrary.InstallSoftware.Shared
+    val j = b.bind(UpstreamBoundMandate.fromLiteral(InstallSoftware.Input()))
 
     val pw = new PrintWriter(System.out)
     j.dump(pw)

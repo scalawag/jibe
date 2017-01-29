@@ -126,9 +126,7 @@ object MandateLibrary {
         UpdateAptGet.Input()
       } flatMap {
         UpdateAptGet.Mandate
-      } map { _ =>
-        Input() // This is gross.  It shouldn't need to be here because it's going to be ignored anyway.
-      } flatMap {
+      } replace {
         in
       } flatMap {
         PostAptGetUpdate
@@ -172,9 +170,7 @@ object MandateLibrary {
         UpdateAptGet.Input()
       } flatMap {
         UpdateAptGet.Mandate
-      } map { _ =>
-        Input() // This is gross.  It shouldn't need to be here because it's going to be ignored anyway.
-      } flatMap { _ =>
+      } replace {
         in
       } flatMap {
         PostAptGetUpdate
@@ -190,7 +186,7 @@ object MandateLibrary {
 
       val java = in map { _ => InstallJava8.Input() } flatMap InstallJava8.Complete
       val sbt = in map { _ => InstallSbt.Input() } flatMap InstallSbt.Complete
-      ( java join sbt ) //compositeAs("Install Software") map ( _ => () )
+      ( java join sbt ) compositeAs("Install Software") map ( _ => () )
     }
 
     val Shared = {
@@ -203,15 +199,14 @@ object MandateLibrary {
           ( in map { i => InstallSbt.Input(i.sbtVersion) } flatMap InstallSbt.PreAptGetUpdate )
         )
 
-      // TODO: weird map to create an Input just to get the type (which is gross)
-      val mid = pres.map( _ => UpdateAptGet.Input() ).flatMap(UpdateAptGet.Mandate).map(_ => Input()).flatMap( _ => in )
+      val mid = pres.map( _ => UpdateAptGet.Input() ).flatMap(UpdateAptGet.Mandate) replace in
 
       val post =
         (
           ( mid map { i => InstallJava8.Input(i.javaVersion) } flatMap InstallJava8.PostAptGetUpdate )
             join
           ( mid map { i => InstallSbt.Input(i.sbtVersion) } flatMap InstallSbt.PostAptGetUpdate )
-        ) //compositeAs("Install Software") map { _ => () }
+        ) compositeAs("Install Software") map { _ => () }
 
       post
     }

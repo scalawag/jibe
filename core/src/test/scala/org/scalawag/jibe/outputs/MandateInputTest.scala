@@ -1,5 +1,5 @@
 package org.scalawag.jibe.outputs
-/*
+
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FunSpec, Matchers}
 
@@ -18,6 +18,8 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
         class TestMandateInput(r: Try[DryRun.Result[A]]) extends UpstreamBoundMandate[A] {
           var callCount = 0
 
+          override val upstreams: Iterable[UpstreamBoundMandate[_]] = Iterable.empty
+
           override def dryRunResult = {
             callCount += 1
             r match {
@@ -32,12 +34,12 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
 
         val a = new TestMandateInput(ar)
         val b = new TestMandateInput(br)
-        val m = a join b
-
-        Await.ready(m.dryRunResult, Duration.Inf)
-        val o = m.dryRunResult.value.get
-
-        o shouldBe jr
+//        val m = a join b
+//
+//        Await.ready(m.dryRunResult, Duration.Inf)
+//        val o = m.dryRunResult.value.get
+//
+//        o shouldBe jr
 
         a.callCount shouldBe 1
         b.callCount shouldBe 1
@@ -71,7 +73,7 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
     testDryRunResultCombination(ua, ne, ne)
     testDryRunResultCombination(ua, ub, uj)
   }
-
+/*
   describe("join run combinations") {
 
     def testRunResultCombination[A](ar: Try[Run.Result[A]], br: Try[Run.Result[A]], jr: Try[Run.Result[A]]) =
@@ -364,5 +366,5 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
     }
 
   }
-}
 */
+}
