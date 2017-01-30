@@ -1,6 +1,6 @@
 package org.scalawag.jibe.outputs
 
-abstract class SimpleLogicMandate[-A, +B] extends Mandate[A, B] {
+abstract class SimpleLogicMandate[-A, +B] extends Mandate[A, B] { self =>
   protected[this] def dryRunLogic(in: A)(implicit runContext: RunContext): Option[B]
   protected[this] def runLogic(in: A)(implicit runContext: RunContext): B
 
@@ -26,6 +26,8 @@ abstract class SimpleLogicMandate[-A, +B] extends Mandate[A, B] {
         }
       }
     }
+
+    override val toString = self.toString
   }
 
   override def bind(upstream: UpstreamBoundMandate[A])(implicit runContext: RunContext): UpstreamBoundMandate[B] =

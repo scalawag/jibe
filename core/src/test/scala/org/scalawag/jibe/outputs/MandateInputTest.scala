@@ -1,5 +1,7 @@
 package org.scalawag.jibe.outputs
 
+import java.io.PrintWriter
+
 import org.scalamock.scalatest.MockFactory
 import org.scalatest.{FunSpec, Matchers}
 
@@ -15,34 +17,50 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
     def testDryRunResultCombination[A](ar: Try[DryRun.Result[A]], br: Try[DryRun.Result[A]], jr: Try[DryRun.Result[A]]) =
       it(s"should return $jr if the inputs are $ar and $br") {
 
-        class TestMandateInput(r: Try[DryRun.Result[A]]) extends UpstreamBoundMandate[A] {
-          var callCount = 0
+        class TestMandate[B](r: Try[DryRun.Result[B]]) extends Mandate[Unit, B] {
+          var instances = List.empty[TestBoundMandate]
 
-          override val upstreams: Iterable[UpstreamBoundMandate[_]] = Iterable.empty
+          class TestBoundMandate extends UpstreamBoundMandate[B] {
+            var callCount = 0
 
-          override def dryRunResult = {
-            callCount += 1
-            r match {
-              case Success(x) => Future.successful(x)
-              case Failure(x) => Future.failed(x)
+            override val upstreams: Iterable[UpstreamBoundMandate[_]] = Iterable.empty
+
+            override def dryRunResult = {
+              callCount += 1
+              r match {
+                case Success(x) => Future.successful(x)
+                case Failure(x) => Future.failed(x)
+              }
             }
+
+            override def runResult = ???
+
+            override val toString = s"TestBoundMandate($r)"
           }
 
-          override def runResult = ???
+
+          override def bind(in: UpstreamBoundMandate[Unit])(implicit runContext: RunContext) = {
+            val b = new TestBoundMandate
+            instances ::= b
+            b
+          }
+
+          override val toString = s"TestMandate($r)"
         }
 
+        val a = new TestMandate(ar)
+        val b = new TestMandate(br)
+        val m = ( a join b ).bind(UpstreamBoundMandate.fromLiteral(()))
 
-        val a = new TestMandateInput(ar)
-        val b = new TestMandateInput(br)
-//        val m = a join b
-//
-//        Await.ready(m.dryRunResult, Duration.Inf)
-//        val o = m.dryRunResult.value.get
-//
-//        o shouldBe jr
+        Await.ready(m.dryRunResult, Duration.Inf)
+        val o = m.dryRunResult.value.get
 
-        a.callCount shouldBe 1
-        b.callCount shouldBe 1
+        o shouldBe jr
+
+        a.instances.size shouldBe 1
+        b.instances.size shouldBe 1
+        a.instances.head.callCount shouldBe 1
+        b.instances.head.callCount shouldBe 1
       }
 
     val fa = Failure(new RuntimeException("a"))
@@ -187,15 +205,17 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
 
   describe("flatMap dry-run combinations") {
 
-    def testDryRunResultCombination[A](ar: Try[DryRun.Result[A]], br: Try[DryRun.Result[A]], jr: Try[DryRun.Result[A]]) =
+    def testDryRunResultCombination(ar: Try[DryRun.Result[String]], br: Try[DryRun.Result[String]], jr: Try[DryRun.Result[String]]) =
       it(s"should return $jr if the inputs are $ar and $br") {
 
-        class TestOpenMandate(r: Try[DryRun.Result[A]]) extends Mandate[Unit, A] {
-          var callCount = 0
+        class TestMandate(r: Try[DryRun.Result[String]]) extends Mandate[String, String] {
+          var instances = List.empty[TestBoundMandate]
 
-          override val upstream = Iterable.empty
+          class TestBoundMandate extends UpstreamBoundMandate[String] {
+            var callCount = 0
 
-          class TestMandate(r: Try[DryRun.Result[A]]) extends UpstreamBoundMandate[A] {
+            override val upstreams: Iterable[UpstreamBoundMandate[_]] = Iterable.empty
+
             override def dryRunResult = {
               callCount += 1
               r match {
@@ -205,24 +225,37 @@ class MandateInputTest extends FunSpec with Matchers with MockFactory {
             }
 
             override def runResult = ???
+
+            override val toString = s"TestBoundMandate($r)"
           }
 
-          override def bind(in: UpstreamBoundMandate[Unit])(implicit runContext: RunContext) = new TestMandate(r)
+
+          override def bind(in: UpstreamBoundMandate[String])(implicit runContext: RunContext) = {
+            val b = new TestBoundMandate
+            instances ::= b
+            b
+          }
+
+          override val toString = s"TestMandate($r)"
         }
 
-        val oa = new TestOpenMandate(ar)
-        val ob = new TestOpenMandate(br)
-        val om = oa map { _ => () } flatMap ob
-        val m = om.bind(())
+        val a = new TestMandate(ar)
+        val b = new TestMandate(br)
+        val m = ( a flatMap b ).bind("blah")
+
+        val pw = new PrintWriter(System.out)
+        m.dump(pw)
+        pw.flush()
 
         Await.ready(m.dryRunResult, Duration.Inf)
         val o = m.dryRunResult.value.get
 
         o shouldBe jr
 
-        oa.callCount shouldBe 1
-        ob.callCount shouldBe 1
-
+        a.instances.size shouldBe 1
+        b.instances.size shouldBe 1
+        a.instances.head.callCount shouldBe 1
+        b.instances.head.callCount shouldBe 1
       }
 
 

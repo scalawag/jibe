@@ -83,31 +83,26 @@ trait UpstreamBoundMandate[+A] { me =>
 //      m.upstreamMandates foreach { i =>
 //        i.dump(pw, depth + 2)
 //      }
-    case m: BoundMandate[_] =>
-      pw.println(" " * depth + m)
-      m.upstreams foreach { i =>
-        i.dump(pw, depth + 2)
-      }
     case m =>
-      pw.println(" " * depth + m)
+      pw.println("  " * depth + m)
       m.upstreams foreach { i =>
-        i.dump(pw, depth)
+        i.dump(pw, depth + 1)
       }
   }
 
 }
 
 object UpstreamBoundMandate {
-  // This one maintains the upstream graph.  It's useful internally to ensure the graph is built properly.
-  def apply[A](a: A, upstream: UpstreamBoundMandate[_]): UpstreamBoundMandate[A] = new UpstreamBoundMandate[A] {
-    override val toString: String = s"Literal($a, $upstream)"
-    override val upstreams = Iterable(upstream)
-    override val dryRunResult = Future.successful(DryRun.Unneeded(a))
-    override val runResult = Future.successful(Run.Unneeded(a))
-  }
+//  // This one maintains the upstream graph.  It's useful internally to ensure the graph is built properly.
+//  def apply[A](a: A, upstream: UpstreamBoundMandate[_]): UpstreamBoundMandate[A] = new UpstreamBoundMandate[A] {
+//    override val toString: String = s"Literal($a, $upstream)"
+//    override val upstreams = Iterable(upstream)
+//    override val dryRunResult = Future.successful(DryRun.Unneeded(a))
+//    override val runResult = Future.successful(Run.Unneeded(a))
+//  }
 
   // This one does not maintain the upstream graph (because it doesn't have one or it's not possible).
-  def fromLiteral[A](a:A): UpstreamBoundMandate[A] = new UpstreamBoundMandate[A] {
+  implicit def fromLiteral[A](a:A): UpstreamBoundMandate[A] = new UpstreamBoundMandate[A] {
     override val toString: String = s"Literal($a)"
     override val upstreams = Iterable.empty
     override val dryRunResult = Future.successful(DryRun.Unneeded(a))

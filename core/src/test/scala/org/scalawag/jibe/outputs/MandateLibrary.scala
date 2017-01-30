@@ -199,7 +199,7 @@ object MandateLibrary {
           ( in map { i => InstallSbt.Input(i.sbtVersion) } flatMap InstallSbt.PreAptGetUpdate )
         )
 
-      val mid = pres.map( _ => UpdateAptGet.Input() ).flatMap(UpdateAptGet.Mandate) replace in
+      val mid = pres.map( _ => UpdateAptGet.Input() ) flatMap UpdateAptGet.Mandate replace in
 
       val post =
         (
